@@ -1,0 +1,165 @@
+import { ReactNode, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "./AppSidebar";
+import { Bell, User } from "lucide-react";
+import { Button } from "./ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { toast } from "sonner";
+
+interface LayoutProps {
+  children: ReactNode;
+}
+
+export function Layout({ children }: LayoutProps) {
+  const navigate = useNavigate();
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [showSupportDialog, setShowSupportDialog] = useState(false);
+  const [supportData, setSupportData] = useState({ category: "", description: "" });
+
+  const handleLogout = () => {
+    toast.success("Logged out successfully");
+    navigate("/");
+  };
+
+  const handleSupportSubmit = () => {
+    if (!supportData.category || !supportData.description) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    toast.success("Support request submitted successfully");
+    setShowSupportDialog(false);
+    setSupportData({ category: "", description: "" });
+  };
+
+  return (
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full">
+        <AppSidebar />
+        <div className="flex-1 flex flex-col">
+          <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-card px-6">
+            <SidebarTrigger className="text-primary" />
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" className="relative">
+                <Bell className="h-5 w-5" />
+                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-accent"></span>
+              </Button>
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <User className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>
+                    <div>
+                      <p className="font-semibold">John Doe</p>
+                      <p className="text-xs text-muted-foreground">john@agriplatform.com</p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate("/settings")}>
+                    Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowSupportDialog(true)}>
+                    Support
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setShowLogoutDialog(true)} className="text-destructive">
+                    Log out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </header>
+          
+          <main className="flex-1 p-6 bg-background">
+            {children}
+          </main>
+        </div>
+      </div>
+
+      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to logout?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You will need to sign in again to access your dashboard.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>No, stay logged in</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLogout}>Yes, logout</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={showSupportDialog} onOpenChange={setShowSupportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Contact Support</DialogTitle>
+            <DialogDescription>
+              Tell us about the issue you're facing and we'll help you resolve it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select value={supportData.category} onValueChange={(value) => setSupportData({ ...supportData, category: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="crop">Crop Related</SelectItem>
+                  <SelectItem value="transaction">Transaction</SelectItem>
+                  <SelectItem value="analysis">Analysis</SelectItem>
+                  <SelectItem value="software">Software Issue/Glitches</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                placeholder="Describe your problem..."
+                value={supportData.description}
+                onChange={(e) => setSupportData({ ...supportData, description: e.target.value })}
+                rows={5}
+              />
+            </div>
+            <Button onClick={handleSupportSubmit} className="w-full">
+              Submit Request
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </SidebarProvider>
+  );
+}
