@@ -8,7 +8,7 @@ load_dotenv(dotenv_path=os.path.join(Path(__file__).resolve().parent.parent, ".e
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key")
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "my-local-dev-secret-key") 
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
 
@@ -66,9 +66,9 @@ WSGI_APPLICATION = "oelp_backend.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": os.getenv("DB_ENGINE", "django.contrib.gis.db.backends.postgis"),
-        "NAME": os.getenv("DB_NAME", "oelp"),
-        "USER": os.getenv("DB_USER", "oelp"),
-        "PASSWORD": os.getenv("DB_PASSWORD", "oelp"),
+        "NAME": os.getenv("DB_NAME", "OELP_Final"),
+        "USER": os.getenv("DB_USER", "postgres"),
+        "PASSWORD": os.getenv("DB_PASSWORD", "postgres"),
         "HOST": os.getenv("DB_HOST", "localhost"),
         "PORT": os.getenv("DB_PORT", "5432"),
     }
@@ -86,21 +86,38 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-STORAGES = {
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    }
-}
+# ---------- STORAGE CONFIG ----------
+USE_S3 = all([
+    os.getenv("AWS_ACCESS_KEY_ID"),
+    os.getenv("AWS_SECRET_ACCESS_KEY"),
+    os.getenv("AWS_STORAGE_BUCKET_NAME"),
+])
 
-# Storage: S3 or local
-DEFAULT_FILE_STORAGE = os.getenv("DEFAULT_FILE_STORAGE", "django.core.files.storage.FileSystemStorage")
-if DEFAULT_FILE_STORAGE == "storages.backends.s3boto3.S3Boto3Storage":
-    AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")
-    AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
-    AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME", "")
-    AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME", "")
+if USE_S3:
+    # S3 storage for production
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        },
+        "staticfiles": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        },
+    }
+
+    AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+    AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
+    AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME")
     AWS_S3_FILE_OVERWRITE = False
     AWS_DEFAULT_ACL = None
+
+else:
+    # Local development & CI
+    DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
+    STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    STATIC_ROOT = BASE_DIR / "staticfiles"
+    MEDIA_ROOT = BASE_DIR / "media"
+
 
 CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL", "true").lower() == "true"
 
