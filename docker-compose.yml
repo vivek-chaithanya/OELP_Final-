@@ -3,9 +3,9 @@ services:
   db:
     image: postgis/postgis:16-3.4
     environment:
-      POSTGRES_DB: ${DB_NAME:-oelp}
-      POSTGRES_USER: ${DB_USER:-oelp}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-oelp}
+      POSTGRES_DB: ${DB_NAME:-OELP_Final}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     volumes:
