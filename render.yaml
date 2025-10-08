@@ -1,0 +1,102 @@
+# render.yaml
+services:
+  # ----------------------------
+  # 1. PostgreSQL Database
+  # ----------------------------
+  - type: postgres
+    name: oelp-db
+    plan: free
+
+  # ----------------------------
+  # 2. Redis for Celery
+  # ----------------------------
+  - type: redis
+    name: oelp-redis
+    plan: free
+
+  # ----------------------------
+  # 3. Django Backend API
+  # ----------------------------
+  - type: web
+    name: oelp-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn oelp_backend.wsgi:application --bind 0.0.0.0:$PORT
+    releaseCommand: |
+      python oelp_backend/manage.py migrate --noinput
+      python oelp_backend/manage.py collectstatic --noinput
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: oelp-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: oelp-redis
+          type: redis
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: false
+      - key: DJANGO_ALLOWED_HOSTS
+        value: oelp-backend.onrender.com
+      - key: CELERY_BROKER_URL
+        sync: false
+        fromService:
+          name: oelp-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        sync: false
+        fromService:
+          name: oelp-redis
+          type: redis
+          property: connectionString
+
+  # ----------------------------
+  # 4. Frontend React App
+  # ----------------------------
+  - type: static_site
+    name: oelp-frontend
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    publishDir: frontend/build
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://oelp-backend.onrender.com/api
+
+  # ----------------------------
+  # 5. Celery Background Worker
+  # ----------------------------
+  - type: worker
+    name: oelp-celery
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A oelp_backend worker --loglevel=info --concurrency=2
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: oelp-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: oelp-redis
+          type: redis
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        sync: false
+      - key: DJANGO_DEBUG
+        value: false
+      - key: DJANGO_ALLOWED_HOSTS
+        value: oelp-backend.onrender.com
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: oelp-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: oelp-redis
+          type: redis
+          property: connectionString

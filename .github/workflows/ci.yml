@@ -24,6 +24,19 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+    env:
+      DJANGO_SECRET_KEY: test-secret
+      DJANGO_DEBUG: 'false'
+      DB_ENGINE: django.contrib.gis.db.backends.postgis
+      DB_NAME: oelp
+      DB_USER: oelp
+      DB_PASSWORD: oelp
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      CORS_ALLOW_ALL: 'true'
+      DJANGO_ALLOWED_HOSTS: '127.0.0.1,localhost'
+      DJANGO_TIME_ZONE: 'UTC'
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -43,20 +56,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Django checks and tests
-        env:
-          DJANGO_SECRET_KEY: test
-          DJANGO_DEBUG: 'false'
-          DB_ENGINE: django.contrib.gis.db.backends.postgis
-          DB_NAME: oelp
-          DB_USER: oelp
-          DB_PASSWORD: oelp
-          DB_HOST: 127.0.0.1
-          DB_PORT: 5432
+      - name: Django checks and migrations
         run: |
           python oelp_backend/manage.py check
           python oelp_backend/manage.py migrate --noinput
-          python - <<'PY'
-            from django.conf import settings
-            print('Settings loaded OK:', settings.INSTALLED_APPS[:3])
-          PY
