@@ -1,22 +1,15 @@
-# render.yaml
-services:
-  # ----------------------------
-  # 1. PostgreSQL Database
-  # ----------------------------
-  - type: postgres
-    name: oelp-db
+databases:
+  # PostgreSQL
+  - name: oelp-db
     plan: free
 
-  # ----------------------------
-  # 2. Redis for Celery
-  # ----------------------------
+services:
+  # Redis for Celery
   - type: redis
     name: oelp-redis
     plan: free
 
-  # ----------------------------
-  # 3. Django Backend API
-  # ----------------------------
+  # Django Backend API
   - type: web
     name: oelp-backend
     env: python
@@ -30,11 +23,6 @@ services:
         fromDatabase:
           name: oelp-db
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: oelp-redis
-          type: redis
-          property: connectionString
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: DJANGO_DEBUG
@@ -42,33 +30,25 @@ services:
       - key: DJANGO_ALLOWED_HOSTS
         value: oelp-backend.onrender.com
       - key: CELERY_BROKER_URL
-        sync: false
         fromService:
           name: oelp-redis
-          type: redis
           property: connectionString
       - key: CELERY_RESULT_BACKEND
-        sync: false
         fromService:
           name: oelp-redis
-          type: redis
           property: connectionString
 
-  # ----------------------------
-  # 4. Frontend React App
-  # ----------------------------
+  # Frontend React App (Vite)
   - type: static_site
     name: oelp-frontend
     rootDir: frontend
     buildCommand: npm ci && npm run build
     publishDir: dist
     envVars:
-      - key: REACT_APP_API_URL
+      - key: VITE_API_URL
         value: https://oelp-backend.onrender.com/api
 
-  # ----------------------------
-  # 5. Celery Background Worker
-  # ----------------------------
+  # Celery Background Worker
   - type: worker
     name: oelp-celery
     env: python
@@ -79,13 +59,8 @@ services:
         fromDatabase:
           name: oelp-db
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: oelp-redis
-          type: redis
-          property: connectionString
       - key: DJANGO_SECRET_KEY
-        sync: false
+        generateValue: true
       - key: DJANGO_DEBUG
         value: false
       - key: DJANGO_ALLOWED_HOSTS
@@ -93,10 +68,8 @@ services:
       - key: CELERY_BROKER_URL
         fromService:
           name: oelp-redis
-          type: redis
           property: connectionString
       - key: CELERY_RESULT_BACKEND
         fromService:
           name: oelp-redis
-          type: redis
           property: connectionString
