@@ -5,7 +5,10 @@ import io
 import secrets
 from datetime import date, datetime, timedelta
 
-import razorpay
+try:
+    import razorpay  # type: ignore
+except Exception:  # pragma: no cover - lazily import inside view if missing
+    razorpay = None  # type: ignore
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.contenttypes.models import ContentType
@@ -345,7 +348,13 @@ class RazorpayCreateOrderView(APIView):
     def post(self, request):
         amount = int(float(request.data.get("amount", 0)) * 100)
         currency = request.data.get("currency", "INR")
-        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+        # Lazy import to avoid hard dependency during CI checks
+        global razorpay  # type: ignore
+        if razorpay is None:
+            from importlib import import_module
+
+            razorpay = import_module("razorpay")  # type: ignore
+        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))  # type: ignore
         order = client.order.create({"amount": amount, "currency": currency})
         return Response(order)
 
