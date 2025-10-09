@@ -8,8 +8,8 @@ services:
     name: oelp-backend
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn oelp_backend.wsgi:application --bind 0.0.0.0:$PORT
+    buildCommand: pip install -r requirements.txt && python oelp_backend/manage.py collectstatic --noinput
+    startCommand: bash -c "python oelp_backend/manage.py migrate --noinput && gunicorn oelp_backend.wsgi:application --bind 0.0.0.0:$PORT"
     envVars:
       - key: DATABASE_URL
         sync: false
@@ -25,10 +25,7 @@ services:
         sync: false
       - key: CELERY_RESULT_BACKEND
         sync: false
-    # Run DB migrations & collect static before each deploy
-    preDeployCommand: |
-      python oelp_backend/manage.py migrate --noinput
-      python oelp_backend/manage.py collectstatic --noinput
+    # preDeployCommand is not supported on free tier; handled via build/start commands
 
   # ----------------------------
   # 4. Frontend React App
