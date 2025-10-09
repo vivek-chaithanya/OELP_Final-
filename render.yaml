@@ -8,7 +8,7 @@ services:
     name: oelp-backend
     env: python
     buildCommand: pip install -r requirements.txt && python oelp_backend/manage.py collectstatic --noinput
-    startCommand: bash -c "python oelp_backend/manage.py migrate --noinput && gunicorn --chdir oelp_backend oelp_backend.wsgi:application --bind 0.0.0.0:$PORT"
+    startCommand: bash -c "python oelp_backend/manage.py makemigrations --noinput && python oelp_backend/manage.py migrate --noinput && gunicorn --chdir oelp_backend oelp_backend.wsgi:application --bind 0.0.0.0:$PORT"
     envVars:
       - key: DATABASE_URL
         sync: false

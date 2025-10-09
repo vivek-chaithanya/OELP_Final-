@@ -42,6 +42,8 @@ const Login = () => {
     }
   };
 
+  const [submitting, setSubmitting] = useState(false);
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!signupData.name || !signupData.email || !signupData.password) {
@@ -56,19 +58,27 @@ const Login = () => {
       toast.error("Passwords do not match");
       return;
     }
-    const res = await fetch(`${API_URL}/auth/signup/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: signupData.email, username: signupData.name, phone_number: signupData.phone, password: signupData.password }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.token) localStorage.setItem("token", data.token);
-      toast.success("Account created! Redirecting...");
-      setTimeout(() => navigate("/dashboard"), 800);
-    } else {
-      const err = await res.json().catch(() => ({}));
-      toast.error(err.detail || "Failed to create account");
+    try {
+      setSubmitting(true);
+      const res = await fetch(`${API_URL}/auth/signup/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: signupData.email, username: signupData.name, phone_number: signupData.phone, password: signupData.password }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.token) localStorage.setItem("token", data.token);
+        toast.success("Account created! Redirecting...");
+        setTimeout(() => navigate("/dashboard"), 800);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        const firstFieldError = err?.email?.[0] || err?.username?.[0] || err?.password?.[0] || err?.phone_number?.[0];
+        toast.error(err.detail || firstFieldError || `Signup failed (${res.status})`);
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "Network error during signup");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -198,7 +208,7 @@ const Login = () => {
                     />
                   </div>
                 </div>
-                <Button type="submit" className="w-full">
+                <Button type="submit" className="w-full" disabled={submitting}>
                   Create Account
                 </Button>
               </form>
