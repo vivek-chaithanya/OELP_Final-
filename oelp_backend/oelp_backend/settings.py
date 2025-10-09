@@ -3,8 +3,11 @@ from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
 
-# Load .env for local dev, not needed on Render
-load_dotenv(dotenv_path=os.path.join(Path(__file__).resolve().parent.parent, ".env"))
+# Load .env for local dev (repo root and project dir); not needed on Render
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+REPO_ROOT = PROJECT_DIR.parent
+load_dotenv(dotenv_path=PROJECT_DIR / ".env")
+load_dotenv(dotenv_path=REPO_ROOT / ".env")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -21,7 +24,6 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "django.contrib.gis",
     "rest_framework",
     "django_filters",
     "corsheaders",
@@ -69,12 +71,17 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 if DATABASE_URL:
     DATABASES = {
-        "default": dj_database_url.config(default=DATABASE_URL, conn_max_age=600, ssl_require=True)
+        "default": dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True,
+        )
     }
 else:
     DATABASES = {
         "default": {
-            "ENGINE": os.getenv("DB_ENGINE", "django.contrib.gis.db.backends.postgis"),
+            # Use standard Postgres engine for simpler deployment on Render
+            "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
             "NAME": os.getenv("DB_NAME", "OELP_Final"),
             "USER": os.getenv("DB_USER", "postgres"),
             "PASSWORD": os.getenv("DB_PASSWORD", "postgres"),
@@ -107,6 +114,13 @@ else:
 
 # ------------------- CORS -------------------
 CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL", "true").lower() == "true"
+
+# Allow CSRF from common Render domains if needed (not required for token auth)
+CSRF_TRUSTED_ORIGINS = [
+    "https://*.onrender.com",
+    "https://*.vercel.app",
+    *[f"https://{h.strip()}" for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()],
+]
 
 # ------------------- REST FRAMEWORK -------------------
 REST_FRAMEWORK = {

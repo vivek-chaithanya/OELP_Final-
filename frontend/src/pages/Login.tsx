@@ -19,18 +19,30 @@ const Login = () => {
     confirmPassword: "",
   });
 
-  const handleLogin = (e: React.FormEvent) => {
+  const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginData.email || !loginData.password) {
       toast.error("Please fill in all fields");
       return;
     }
-    // Mock login - in production, validate with backend
-    toast.success("Welcome back!");
-    navigate("/dashboard");
+    const res = await fetch(`${API_URL}/auth/login/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(loginData),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.token) localStorage.setItem("token", data.token);
+      toast.success("Welcome back!");
+      navigate("/dashboard");
+    } else {
+      toast.error("Invalid credentials");
+    }
   };
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!signupData.name || !signupData.email || !signupData.password) {
       toast.error("Please fill in all required fields");
@@ -44,9 +56,20 @@ const Login = () => {
       toast.error("Passwords do not match");
       return;
     }
-    // Mock signup - in production, send to backend
-    toast.success("Account created! Redirecting...");
-    setTimeout(() => navigate("/dashboard"), 1500);
+    const res = await fetch(`${API_URL}/auth/signup/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: signupData.email, username: signupData.name, phone_number: signupData.phone, password: signupData.password }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.token) localStorage.setItem("token", data.token);
+      toast.success("Account created! Redirecting...");
+      setTimeout(() => navigate("/dashboard"), 800);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.detail || "Failed to create account");
+    }
   };
 
   return (

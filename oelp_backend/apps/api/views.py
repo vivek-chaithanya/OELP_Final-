@@ -97,6 +97,41 @@ class LogoutView(APIView):
         return Response({"detail": "Logged out"})
 
 
+class MeView(APIView):
+    authentication_classes = [TokenAuthentication]
+
+    def get(self, request):
+        return Response(UserSerializer(request.user).data)
+
+    def put(self, request):
+        user = request.user
+        allowed_fields = {"email", "username", "phone_number", "avatar"}
+        for key, value in request.data.items():
+            if key in allowed_fields:
+                setattr(user, key, value)
+        user.save()
+        return Response(UserSerializer(user).data)
+
+
+class ChangePasswordView(APIView):
+    authentication_classes = [TokenAuthentication]
+
+    def post(self, request):
+        current_password = request.data.get("current_password")
+        new_password = request.data.get("new_password")
+        if not current_password or not new_password:
+            return Response({"detail": "current_password and new_password are required"}, status=status.HTTP_400_BAD_REQUEST)
+        user = request.user
+        if not user.check_password(current_password):
+            return Response({"detail": "Current password is incorrect"}, status=status.HTTP_400_BAD_REQUEST)
+        from django.contrib.auth import password_validation
+
+        password_validation.validate_password(new_password, user)
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+        return Response({"detail": "Password changed successfully"})
+
+
 class SuggestPasswordView(APIView):
     authentication_classes: list = []
     permission_classes: list = []

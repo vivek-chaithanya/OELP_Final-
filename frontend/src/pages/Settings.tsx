@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,11 +9,28 @@ import { toast } from "sonner";
 
 const Settings = () => {
   const [profile, setProfile] = useState({
-    fullName: "John Farmer",
-    email: "john.farmer@agriplatform.com",
-    phone: "+1 (555) 123-4567",
-    location: "California, USA",
+    username: "",
+    email: "",
+    phone_number: "",
+    avatar: "",
   });
+  const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
+  const authHeaders = () => {
+    const token = localStorage.getItem("token");
+    return token ? { Authorization: `Token ${token}` } : {};
+  };
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_URL}/auth/me/`, { headers: authHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          setProfile({ username: data.username || "", email: data.email || "", phone_number: data.phone_number || "", avatar: data.avatar || "" });
+        }
+      } catch {}
+    };
+    load();
+  }, []);
 
   const [password, setPassword] = useState({
     current: "",
@@ -35,11 +52,22 @@ const Settings = () => {
   });
 
   const handleSaveAll = () => {
-    toast.success("All settings saved successfully!");
+    handleUpdateProfile();
   };
 
   const handleUpdateProfile = () => {
-    toast.success("Profile updated successfully!");
+    fetch(`${API_URL}/auth/me/`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(profile),
+    }).then(async (r) => {
+      if (r.ok) {
+        toast.success("Profile updated successfully!");
+      } else {
+        const err = await r.json().catch(() => ({}));
+        toast.error(err.detail || "Failed to update profile");
+      }
+    });
   };
 
   const handleChangePassword = () => {
@@ -55,8 +83,19 @@ const Settings = () => {
       toast.error("Password must be at least 8 characters");
       return;
     }
-    toast.success("Password changed successfully!");
-    setPassword({ current: "", new: "", confirm: "" });
+    fetch(`${API_URL}/auth/change-password/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ current_password: password.current, new_password: password.new }),
+    }).then(async (r) => {
+      if (r.ok) {
+        toast.success("Password changed successfully!");
+        setPassword({ current: "", new: "", confirm: "" });
+      } else {
+        const err = await r.json().catch(() => ({}));
+        toast.error(err.detail || "Failed to change password");
+      }
+    });
   };
 
   return (
@@ -77,8 +116,8 @@ const Settings = () => {
               <Label htmlFor="fullName">Full Name</Label>
               <Input
                 id="fullName"
-                value={profile.fullName}
-                onChange={(e) => setProfile({ ...profile, fullName: e.target.value })}
+                value={profile.username}
+                onChange={(e) => setProfile({ ...profile, username: e.target.value })}
               />
             </div>
             <div className="space-y-2">
@@ -94,16 +133,16 @@ const Settings = () => {
               <Label htmlFor="phone">Phone Number</Label>
               <Input
                 id="phone"
-                value={profile.phone}
-                onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                value={profile.phone_number}
+                onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="location">Location</Label>
+              <Label htmlFor="location">Avatar URL</Label>
               <Input
                 id="location"
-                value={profile.location}
-                onChange={(e) => setProfile({ ...profile, location: e.target.value })}
+                value={profile.avatar}
+                onChange={(e) => setProfile({ ...profile, avatar: e.target.value })}
               />
             </div>
           </div>

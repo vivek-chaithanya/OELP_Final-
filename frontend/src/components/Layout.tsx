@@ -45,18 +45,30 @@ export function Layout({ children }: LayoutProps) {
   const [supportData, setSupportData] = useState({ category: "", description: "" });
 
   const handleLogout = () => {
+    localStorage.removeItem("token");
     toast.success("Logged out successfully");
     navigate("/");
   };
 
-  const handleSupportSubmit = () => {
+  const handleSupportSubmit = async () => {
     if (!supportData.category || !supportData.description) {
       toast.error("Please fill in all fields");
       return;
     }
-    toast.success("Support request submitted successfully");
-    setShowSupportDialog(false);
-    setSupportData({ category: "", description: "" });
+    const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
+    const token = localStorage.getItem("token");
+    const res = await fetch(`${API_URL}/support/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Token ${token}` } : {}) },
+      body: JSON.stringify({ category: supportData.category, description: supportData.description }),
+    });
+    if (res.ok) {
+      toast.success("Support request submitted successfully");
+      setShowSupportDialog(false);
+      setSupportData({ category: "", description: "" });
+    } else {
+      toast.error("Failed to submit support request");
+    }
   };
 
   return (

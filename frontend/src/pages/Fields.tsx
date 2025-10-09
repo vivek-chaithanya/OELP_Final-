@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Map as MapIcon, Droplets, FileText } from "lucide-react";
+import { Plus, Search, Map as MapIcon, Droplets, FileText, Edit, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -12,9 +12,52 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 const Fields = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [fields, setFields] = useState<any[]>([]);
+  const [farms, setFarms] = useState<any[]>([]);
+  const [crops, setCrops] = useState<any[]>([]);
+  const [varieties, setVarieties] = useState<any[]>([]);
+  const [openFieldDialog, setOpenFieldDialog] = useState(false);
+  const [editingField, setEditingField] = useState<any | null>(null);
+  const [formField, setFormField] = useState({
+    name: "",
+    farm: "",
+    crop: "",
+    crop_variety: "",
+    device: "",
+    location_name: "",
+    is_active: true,
+  });
+  const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
+  const authHeaders = () => {
+    const token = localStorage.getItem("token");
+    return token ? { Authorization: `Token ${token}` } : {};
+  };
+  const loadData = async () => {
+    try {
+      const [fieldsRes, farmsRes, cropsRes, varietiesRes] = await Promise.all([
+        fetch(`${API_URL}/fields/`, { headers: authHeaders() }),
+        fetch(`${API_URL}/farms/`, { headers: authHeaders() }),
+        fetch(`${API_URL}/crops/`, { headers: authHeaders() }),
+        fetch(`${API_URL}/crop-varieties/`, { headers: authHeaders() }),
+      ]);
+      const j = async (r: Response) => (Array.isArray(await r.clone().json().catch(() => [])) ? await r.json() : (await r.json()).results);
+      setFields(await j(fieldsRes));
+      setFarms(await j(farmsRes));
+      setCrops(await j(cropsRes));
+      setVarieties(await j(varietiesRes));
+    } catch (e: any) {
+      toast.error(e.message || "Failed to load data");
+    }
+  };
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const stats = [
     { title: "Total Fields", value: "8", subtitle: "25.5 hectares total", icon: MapIcon },
@@ -22,11 +65,10 @@ const Fields = () => {
     { title: "Soil Reports", value: "12", subtitle: "Last updated this month", icon: FileText },
   ];
 
-  const fields = [
-    { id: 1, name: "Field A1", size: "5.2 hectares", soilType: "Loamy", irrigation: "Drip", health: "Good", lastReport: "2024-01-15" },
-    { id: 2, name: "Field B2", size: "3.8 hectares", soilType: "Clay", irrigation: "Sprinkler", health: "Excellent", lastReport: "2024-01-20" },
-    { id: 3, name: "Field C3", size: "7.1 hectares", soilType: "Sandy", irrigation: "Flood", health: "Fair", lastReport: "2024-01-10" },
-  ];
+  const filteredFields = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return fields.filter((f) => f.name.toLowerCase().includes(q));
+  }, [fields, searchQuery]);
 
   const getHealthColor = (health: string) => {
     switch (health) {
@@ -44,7 +86,7 @@ const Fields = () => {
           <h1 className="text-3xl font-bold">Fields Management</h1>
           <p className="text-muted-foreground">Manage your farmland, soil reports, and irrigation systems</p>
         </div>
-        <Button>
+        <Button onClick={() => { setEditingField(null); setFormField({ name: "", farm: "", crop: "", crop_variety: "", device: "", location_name: "", is_active: true }); setOpenFieldDialog(true); }}>
           <Plus className="mr-2 h-4 w-4" />
           Add Field
         </Button>
@@ -98,20 +140,24 @@ const Fields = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {fields.map((field) => (
+              {filteredFields.map((field) => (
                 <TableRow key={field.id}>
                   <TableCell className="font-medium">{field.name}</TableCell>
-                  <TableCell>{field.size}</TableCell>
-                  <TableCell>{field.soilType}</TableCell>
-                  <TableCell>{field.irrigation}</TableCell>
+                  <TableCell>{field.area?.hectares ? `${field.area.hectares} ha` : "-"}</TableCell>
+                  <TableCell>{field.soilType || "-"}</TableCell>
+                  <TableCell>{field.irrigation || "-"}</TableCell>
                   <TableCell>
-                    <Badge variant={getHealthColor(field.health)}>{field.health}</Badge>
+                    <Badge variant="secondary">—</Badge>
                   </TableCell>
-                  <TableCell>{field.lastReport}</TableCell>
+                  <TableCell>{field.updated_at?.slice(0,10) || "-"}</TableCell>
                   <TableCell>
                     <div className="flex gap-2">
-                      <Button variant="ghost" size="sm">Report</Button>
-                      <Button variant="ghost" size="sm">Irrigation</Button>
+                      <Button variant="ghost" size="sm" onClick={() => { setEditingField(field); setFormField({ name: field.name || "", farm: String(field.farm || ""), crop: String(field.crop || ""), crop_variety: String(field.crop_variety || ""), device: String(field.device || ""), location_name: field.location_name || "", is_active: !!field.is_active }); setOpenFieldDialog(true); }}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={async () => { if (!confirm("Delete this field?")) return; const res = await fetch(`${API_URL}/fields/${field.id}/`, { method: "DELETE", headers: authHeaders() }); if (res.ok) { toast.success("Field deleted"); loadData(); } else { toast.error("Failed to delete field"); } }}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -156,6 +202,71 @@ const Fields = () => {
           </CardContent>
         </Card>
       </div>
+      <Dialog open={openFieldDialog} onOpenChange={setOpenFieldDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingField ? "Edit Field" : "Add Field"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input value={formField.name} onChange={(e) => setFormField({ ...formField, name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Farm</Label>
+                <select className="border rounded-md h-10 px-3 w-full" value={formField.farm} onChange={(e) => setFormField({ ...formField, farm: e.target.value })}>
+                  <option value="" disabled>Select farm</option>
+                  {farms.map((f) => (<option key={f.id} value={f.id}>{f.name}</option>))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Device</Label>
+                <Input value={formField.device} onChange={(e) => setFormField({ ...formField, device: e.target.value })} placeholder="Device ID (optional)" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Crop</Label>
+                <select className="border rounded-md h-10 px-3 w-full" value={formField.crop} onChange={(e) => setFormField({ ...formField, crop: e.target.value })}>
+                  <option value="">None</option>
+                  {crops.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Variety</Label>
+                <select className="border rounded-md h-10 px-3 w-full" value={formField.crop_variety} onChange={(e) => setFormField({ ...formField, crop_variety: e.target.value })}>
+                  <option value="">None</option>
+                  {varieties.filter((v) => String(v.crop) === String(formField.crop)).map((v) => (<option key={v.id} value={v.id}>{v.name}</option>))}
+                </select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Location Name</Label>
+              <Input value={formField.location_name} onChange={(e) => setFormField({ ...formField, location_name: e.target.value })} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpenFieldDialog(false)}>Cancel</Button>
+              <Button onClick={async () => {
+                const payload: any = {
+                  name: formField.name,
+                  farm: formField.farm ? Number(formField.farm) : undefined,
+                  crop: formField.crop ? Number(formField.crop) : null,
+                  crop_variety: formField.crop_variety ? Number(formField.crop_variety) : null,
+                  device: formField.device ? Number(formField.device) : null,
+                  location_name: formField.location_name || null,
+                  is_active: !!formField.is_active,
+                };
+                const isEdit = !!editingField;
+                const url = isEdit ? `${API_URL}/fields/${editingField.id}/` : `${API_URL}/fields/`;
+                const method = isEdit ? "PUT" : "POST";
+                const res = await fetch(url, { method, headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify(payload) });
+                if (res.ok) { toast.success(isEdit ? "Field updated" : "Field created"); setOpenFieldDialog(false); loadData(); } else { const err = await res.json().catch(() => ({})); toast.error(err.detail || "Failed to save field"); }
+              }}>{editingField ? "Update" : "Create"}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
