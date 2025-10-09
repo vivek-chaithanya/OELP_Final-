@@ -67,21 +67,32 @@ WSGI_APPLICATION = "oelp_backend.wsgi.application"
 # ------------------- DATABASE -------------------
 # Render provides DATABASE_URL automatically in Postgres service
 import dj_database_url
+
+# Allow opting into PostGIS explicitly; default to plain Postgres locally
+USE_POSTGIS = os.getenv("USE_POSTGIS", "false").lower() == "true"
+FORCED_ENGINE = (
+    "django.contrib.gis.db.backends.postgis" if USE_POSTGIS else "django.db.backends.postgresql"
+)
+
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if DATABASE_URL:
+    # Force the engine unless PostGIS is explicitly requested, so local dev
+    # won't require the PostGIS extension.
     DATABASES = {
         "default": dj_database_url.config(
             default=DATABASE_URL,
             conn_max_age=600,
-            ssl_require=True,
+            ssl_require=os.getenv("DB_SSL_REQUIRE", "true").lower() == "true",
+            engine=FORCED_ENGINE,
         )
     }
 else:
+    # Fallback config for environments without DATABASE_URL.
+    engine_env = os.getenv("DB_ENGINE")
     DATABASES = {
         "default": {
-            # Use standard Postgres engine for simpler deployment on Render
-            "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
+            "ENGINE": engine_env or FORCED_ENGINE,
             "NAME": os.getenv("DB_NAME", "OELP_Final"),
             "USER": os.getenv("DB_USER", "postgres"),
             "PASSWORD": os.getenv("DB_PASSWORD", "postgres"),
