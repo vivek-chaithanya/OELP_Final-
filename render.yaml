@@ -61,7 +61,7 @@ services:
     env: static
     rootDir: frontend
     buildCommand: npm ci && npm run build
-    staticPublishPath: build
+    staticPublishPath: dist
     envVars:
       - key: REACT_APP_API_URL
         value: https://oelp-backend.onrender.com/api
@@ -100,11 +100,3 @@ services:
           name: oelp-redis
           type: redis
           property: connectionString
-
-# ----------------------------
-# Optional Pre-deploy Hooks
-# ----------------------------
-hooks:
-  preDeploy:
-    - python oelp_backend/manage.py migrate --noinput
-    - python oelp_backend/manage.py collectstatic --noinput
