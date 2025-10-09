@@ -89,7 +89,8 @@ if DATABASE_URL:
     }
 else:
     # Fallback config for environments without DATABASE_URL.
-    engine_env = os.getenv("DB_ENGINE")
+    # Ignore DB_ENGINE override unless PostGIS is explicitly enabled.
+    engine_env = os.getenv("DB_ENGINE") if USE_POSTGIS else None
     DATABASES = {
         "default": {
             "ENGINE": engine_env or FORCED_ENGINE,
