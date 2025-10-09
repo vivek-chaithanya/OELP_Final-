@@ -17,6 +17,9 @@ services:
   - type: redis
     name: oelp-redis
     plan: free
+    ipAllowList:
+      - description: backend-and-workers
+        source: 0.0.0.0/0
 
   # ----------------------------
   # 3. Django Backend API
