@@ -56,11 +56,12 @@ services:
   # ----------------------------
   # 4. Frontend React App
   # ----------------------------
-  - type: static_site
+  - type: web
     name: oelp-frontend
+    env: static
     rootDir: frontend
     buildCommand: npm ci && npm run build
-    publishDir: dist
+    staticPublishPath: dist
     envVars:
       - key: REACT_APP_API_URL
         value: https://oelp-backend.onrender.com/api
