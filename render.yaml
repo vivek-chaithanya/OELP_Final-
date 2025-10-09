@@ -1,12 +1,13 @@
 # render.yaml
-services:
+
+databases:
   # ----------------------------
   # 1. PostgreSQL Database
   # ----------------------------
-  - type: postgres
-    name: oelp-db
+  - name: oelp-db
     plan: free
 
+services:
   # ----------------------------
   # 2. Redis for Celery
   # ----------------------------
@@ -42,13 +43,11 @@ services:
       - key: DJANGO_ALLOWED_HOSTS
         value: oelp-backend.onrender.com
       - key: CELERY_BROKER_URL
-        sync: false
         fromService:
           name: oelp-redis
           type: redis
           property: connectionString
       - key: CELERY_RESULT_BACKEND
-        sync: false
         fromService:
           name: oelp-redis
           type: redis
