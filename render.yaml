@@ -6,6 +6,7 @@ databases:
   # ----------------------------
   - name: oelp-db
     plan: free
+    allowPublicAccess: true  # Allows backend & worker to connect
 
 services:
   # ----------------------------
@@ -22,10 +23,7 @@ services:
     name: oelp-backend
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: >
-      python oelp_backend/manage.py migrate --noinput &&
-      python oelp_backend/manage.py collectstatic --noinput &&
-      gunicorn oelp_backend.wsgi:application --bind 0.0.0.0:$PORT
+    startCommand: gunicorn oelp_backend.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
       - key: DATABASE_URL
         fromDatabase:
