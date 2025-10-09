@@ -1,4 +1,5 @@
 from django.urls import path, include
+from django.http import JsonResponse
 from rest_framework.routers import DefaultRouter
 from . import views
 
@@ -25,6 +26,7 @@ router.register(r"plans/topup", views.TopUpPlanViewSet, basename="topup-plan")
 router.register(r"plans/enterprise", views.EnterprisePlanViewSet, basename="enterprise-plan")
 
 urlpatterns = [
+    path("", lambda r: JsonResponse({"status": "ok"})),
     path("auth/signup/", views.SignUpView.as_view(), name="signup"),
     path("auth/login/", views.LoginView.as_view(), name="login"),
     path("auth/logout/", views.LogoutView.as_view(), name="logout"),
