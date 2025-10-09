@@ -5,7 +5,7 @@ import io
 import secrets
 from datetime import date, datetime, timedelta
 
-import razorpay
+razorpay = None  # type: ignore
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.contenttypes.models import ContentType
@@ -56,6 +56,7 @@ from apps.models_app.plan import MainPlan, TopUpPlan, EnterprisePlan
 from apps.models_app.user_plan import MainUserPlan, TopUpUserPlan, EnterpriseUserPlan
 from apps.models_app.notifications import Notification, SupportRequest
 from apps.models_app.irrigation import IrrigationMethods
+from apps.models_app.soil_report import SoilReport
 
 
 class SignUpView(APIView):
@@ -95,6 +96,41 @@ class LogoutView(APIView):
         except Exception:
             pass
         return Response({"detail": "Logged out"})
+
+
+class MeView(APIView):
+    authentication_classes = [TokenAuthentication]
+
+    def get(self, request):
+        return Response(UserSerializer(request.user).data)
+
+    def put(self, request):
+        user = request.user
+        allowed_fields = {"email", "username", "phone_number", "avatar"}
+        for key, value in request.data.items():
+            if key in allowed_fields:
+                setattr(user, key, value)
+        user.save()
+        return Response(UserSerializer(user).data)
+
+
+class ChangePasswordView(APIView):
+    authentication_classes = [TokenAuthentication]
+
+    def post(self, request):
+        current_password = request.data.get("current_password")
+        new_password = request.data.get("new_password")
+        if not current_password or not new_password:
+            return Response({"detail": "current_password and new_password are required"}, status=status.HTTP_400_BAD_REQUEST)
+        user = request.user
+        if not user.check_password(current_password):
+            return Response({"detail": "Current password is incorrect"}, status=status.HTTP_400_BAD_REQUEST)
+        from django.contrib.auth import password_validation
+
+        password_validation.validate_password(new_password, user)
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+        return Response({"detail": "Password changed successfully"})
 
 
 class SuggestPasswordView(APIView):
@@ -310,7 +346,13 @@ class RazorpayCreateOrderView(APIView):
     def post(self, request):
         amount = int(float(request.data.get("amount", 0)) * 100)
         currency = request.data.get("currency", "INR")
-        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+        # Lazy import to avoid hard dependency during CI checks
+        global razorpay  # type: ignore
+        if razorpay is None:
+            from importlib import import_module
+
+            razorpay = import_module("razorpay")  # type: ignore
+        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))  # type: ignore
         order = client.order.create({"amount": amount, "currency": currency})
         return Response(order)
 

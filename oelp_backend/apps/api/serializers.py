@@ -79,6 +79,7 @@ class FarmSerializer(serializers.ModelSerializer):
     class Meta:
         model = Farm
         fields = ("id", "name", "user")
+        read_only_fields = ("user",)
 
 
 class DeviceSerializer(serializers.ModelSerializer):
@@ -107,6 +108,7 @@ class FieldSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+        read_only_fields = ("user", "created_at", "updated_at", "area")
 
 
 class CropLifecycleDatesSerializer(serializers.ModelSerializer):
@@ -212,6 +214,7 @@ class SupportRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = SupportRequest
         fields = ("id", "user", "category", "description", "assigned_role", "created_at", "updated_at")
+        read_only_fields = ("user", "assigned_role", "created_at", "updated_at")
 
 
 class AssetSerializer(serializers.ModelSerializer):

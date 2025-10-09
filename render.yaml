@@ -61,7 +61,7 @@ services:
     name: oelp-frontend
     rootDir: frontend
     buildCommand: npm ci && npm run build
-    publishDir: frontend/build
+    publishDir: dist
     envVars:
       - key: REACT_APP_API_URL
         value: https://oelp-backend.onrender.com/api
