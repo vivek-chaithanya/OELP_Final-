@@ -62,5 +62,11 @@ services:
         source: /settings
         destination: /index.html
       - type: rewrite
+        source: /login
+        destination: /index.html
+      - type: rewrite
         source: /
+        destination: /index.html
+      - type: rewrite
+        source: /*
         destination: /index.html
