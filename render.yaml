@@ -6,7 +6,9 @@ databases:
   # ----------------------------
   - name: oelp-db
     plan: free
-    allowPublicAccess: true  # Allows backend & worker to connect
+    ipAllowList:
+      - name: all
+        value: 0.0.0.0/0
 
 services:
   # ----------------------------
@@ -50,6 +52,10 @@ services:
           name: oelp-redis
           type: redis
           property: connectionString
+    # Migrate & collect static during deploy
+    releaseCommand: |
+      python oelp_backend/manage.py migrate --noinput
+      python oelp_backend/manage.py collectstatic --noinput
 
   # ----------------------------
   # 4. Frontend React App
