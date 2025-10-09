@@ -7,8 +7,8 @@ databases:
   - name: oelp-db
     plan: free
     ipAllowList:
-      - name: all
-        value: 0.0.0.0/0
+      - description: all
+        source: 0.0.0.0/0
 
 services:
   # ----------------------------
@@ -39,7 +39,7 @@ services:
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: DJANGO_DEBUG
-        value: false
+        value: "false"
       - key: DJANGO_ALLOWED_HOSTS
         value: oelp-backend.onrender.com
       - key: CELERY_BROKER_URL
@@ -52,8 +52,8 @@ services:
           name: oelp-redis
           type: redis
           property: connectionString
-    # Migrate & collect static during deploy
-    releaseCommand: |
+    # Run DB migrations & collect static before each deploy
+    preDeployCommand: |
       python oelp_backend/manage.py migrate --noinput
       python oelp_backend/manage.py collectstatic --noinput
 
@@ -67,7 +67,7 @@ services:
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
     envVars:
-      - key: REACT_APP_API_URL
+      - key: VITE_API_URL
         value: https://oelp-backend.onrender.com/api
 
   # ----------------------------
@@ -89,9 +89,9 @@ services:
           type: redis
           property: connectionString
       - key: DJANGO_SECRET_KEY
-        sync: false
+        generateValue: true
       - key: DJANGO_DEBUG
-        value: false
+        value: "false"
       - key: DJANGO_ALLOWED_HOSTS
         value: oelp-backend.onrender.com
       - key: CELERY_BROKER_URL
