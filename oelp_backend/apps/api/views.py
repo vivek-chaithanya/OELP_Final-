@@ -59,6 +59,7 @@ from apps.models_app.plan import MainPlan, TopUpPlan, EnterprisePlan
 from apps.models_app.user_plan import MainUserPlan, TopUpUserPlan, EnterpriseUserPlan
 from apps.models_app.notifications import Notification, SupportRequest
 from apps.models_app.irrigation import IrrigationMethods
+from apps.models_app.soil_report import SoilReport
 
 
 class SignUpView(APIView):
