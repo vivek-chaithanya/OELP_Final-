@@ -37,4 +37,30 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        sync: false
+        value: https://oelp-backend.onrender.com/api
+    routes:
+      # Single Page App routing: route all paths to index.html
+      - type: rewrite
+        source: /dashboard
+        destination: /index.html
+      - type: rewrite
+        source: /crops
+        destination: /index.html
+      - type: rewrite
+        source: /fields
+        destination: /index.html
+      - type: rewrite
+        source: /subscriptions
+        destination: /index.html
+      - type: rewrite
+        source: /practices
+        destination: /index.html
+      - type: rewrite
+        source: /reports
+        destination: /index.html
+      - type: rewrite
+        source: /settings
+        destination: /index.html
+      - type: rewrite
+        source: /
+        destination: /index.html
