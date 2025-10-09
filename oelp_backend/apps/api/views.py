@@ -5,10 +5,7 @@ import io
 import secrets
 from datetime import date, datetime, timedelta
 
-try:
-    import razorpay  # type: ignore
-except Exception:  # pragma: no cover - lazily import inside view if missing
-    razorpay = None  # type: ignore
+razorpay = None  # type: ignore
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.contenttypes.models import ContentType
