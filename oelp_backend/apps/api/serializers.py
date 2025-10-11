@@ -6,29 +6,27 @@ from rest_framework import serializers
 from apps.models_app.assets import Asset
 from apps.models_app.crop_variety import Crop, CropVariety
 from apps.models_app.farm import Farm
-from apps.models_app.field import Field, Device, CropLifecycleDates, FieldIrrigationMethod
+from apps.models_app.field import Field, Device, CropLifecycleDates, FieldIrrigationMethod, FieldIrrigationPractice
 from apps.models_app.feature import Feature, FeatureType
-from apps.models_app.feature_plan import MainPlanFeature, TopUpPlanFeature, EnterprisePlanFeature
+from apps.models_app.feature_plan import PlanFeature
 from apps.models_app.irrigation import IrrigationMethods
 from apps.models_app.notifications import Notification, SupportRequest
-from apps.models_app.plan import MainPlan, TopUpPlan, EnterprisePlan
+from apps.models_app.plan import Plan
 from apps.models_app.soil_report import SoilTexture, SoilReport
 from apps.models_app.token import UserAuthToken
 from apps.models_app.user import CustomUser
 from apps.models_app.user_plan import (
-    MainUserPlan,
-    TopUpUserPlan,
-    EnterpriseUserPlan,
-    MainPlanFeatureUsage,
-    TopUpPlanFeatureUsage,
-    EnterprisePlanFeatureUsage,
+    UserPlan,
+    PlanFeatureUsage,
+    PaymentMethod,
+    Transaction,
 )
 
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ("id", "email", "username", "phone_number", "avatar", "date_joined")
+        fields = ("id", "email", "username", "full_name", "phone_number", "avatar", "date_joined")
 
 
 class SignUpSerializer(serializers.ModelSerializer):
@@ -36,7 +34,7 @@ class SignUpSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ("email", "username", "phone_number", "password")
+        fields = ("username", "full_name", "phone_number", "password", "google_id", "avatar")
 
     def validate_password(self, value: str) -> str:
         password_validation.validate_password(value)
@@ -51,7 +49,7 @@ class SignUpSerializer(serializers.ModelSerializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    username = serializers.CharField()
     password = serializers.CharField(write_only=True)
 
 
@@ -89,6 +87,7 @@ class DeviceSerializer(serializers.ModelSerializer):
 
 
 class FieldSerializer(serializers.ModelSerializer):
+    soil_type_name = serializers.CharField(source="soil_type.name", read_only=True)
     class Meta:
         model = Field
         fields = (
@@ -102,6 +101,8 @@ class FieldSerializer(serializers.ModelSerializer):
             "boundary",
             "location_name",
             "area",
+            "soil_type",
+            "soil_type_name",
             "image",
             "is_active",
             "is_locked",
@@ -114,13 +115,22 @@ class FieldSerializer(serializers.ModelSerializer):
 class CropLifecycleDatesSerializer(serializers.ModelSerializer):
     class Meta:
         model = CropLifecycleDates
-        fields = ("id", "field", "sowing_date", "harvesting_date")
+        fields = ("id", "field", "sowing_date", "growth_start_date", "flowering_date", "harvesting_date", "yield_amount")
 
 
 class FieldIrrigationMethodSerializer(serializers.ModelSerializer):
     class Meta:
         model = FieldIrrigationMethod
         fields = ("id", "field", "irrigation_method")
+
+
+class FieldIrrigationPracticeSerializer(serializers.ModelSerializer):
+    field_name = serializers.CharField(source="field.name", read_only=True)
+    method_name = serializers.CharField(source="irrigation_method.name", read_only=True)
+
+    class Meta:
+        model = FieldIrrigationPractice
+        fields = ("id", "field", "field_name", "irrigation_method", "method_name", "notes", "performed_at")
 
 
 class SoilTextureSerializer(serializers.ModelSerializer):
@@ -168,40 +178,18 @@ class FeatureSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "feature_type", "created_at", "updated_at")
 
 
-class MainPlanSerializer(serializers.ModelSerializer):
+class PlanSerializer(serializers.ModelSerializer):
     class Meta:
-        model = MainPlan
-        fields = ("id", "name", "price", "duration")
+        model = Plan
+        fields = ("id", "name", "type", "price", "duration")
 
 
-class TopUpPlanSerializer(serializers.ModelSerializer):
+class UserPlanSerializer(serializers.ModelSerializer):
+    plan_name = serializers.CharField(source="plan.name", read_only=True)
+
     class Meta:
-        model = TopUpPlan
-        fields = ("id", "name", "price", "parent_main_plan", "duration")
-
-
-class EnterprisePlanSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = EnterprisePlan
-        fields = ("id", "name", "price", "duration")
-
-
-class MainUserPlanSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = MainUserPlan
-        fields = ("id", "user", "plan", "start_date", "end_date", "expire_at", "is_active")
-
-
-class TopUpUserPlanSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TopUpUserPlan
-        fields = ("id", "user", "plan", "purchase_date", "expire_at", "is_active")
-
-
-class EnterpriseUserPlanSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = EnterpriseUserPlan
-        fields = ("id", "user", "plan", "start_date", "end_date", "expire_at", "is_active")
+        model = UserPlan
+        fields = ("id", "user", "plan", "plan_name", "start_date", "end_date", "expire_at", "is_active")
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -221,4 +209,19 @@ class AssetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Asset
         fields = ("id", "file", "content_type", "object_id", "uploaded_at")
+
+
+class PaymentMethodSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentMethod
+        fields = ("id", "brand", "last4", "exp_month", "exp_year", "is_primary", "created_at", "updated_at")
+        read_only_fields = ("created_at", "updated_at")
+
+
+class TransactionSerializer(serializers.ModelSerializer):
+    plan_name = serializers.CharField(source="plan.name", read_only=True)
+
+    class Meta:
+        model = Transaction
+        fields = ("id", "plan", "plan_name", "amount", "currency", "status", "invoice_pdf", "created_at")
 

@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
@@ -43,6 +43,17 @@ export function Layout({ children }: LayoutProps) {
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [showSupportDialog, setShowSupportDialog] = useState(false);
   const [supportData, setSupportData] = useState({ category: "", description: "" });
+  const [me, setMe] = useState<{ full_name?: string; email?: string } | null>(null);
+
+  useEffect(() => {
+    const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    fetch(`${API_URL}/auth/me/`, { headers: { Authorization: `Token ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setMe(d))
+      .catch(() => {});
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -93,8 +104,8 @@ export function Layout({ children }: LayoutProps) {
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>
                     <div>
-                      <p className="font-semibold">John Doe</p>
-                      <p className="text-xs text-muted-foreground">john@agriplatform.com</p>
+                      <p className="font-semibold">{me?.full_name || "—"}</p>
+                      <p className="text-xs text-muted-foreground">{me?.email || "—"}</p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />

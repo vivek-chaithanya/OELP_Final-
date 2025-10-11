@@ -17,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.models_app.token import UserAuthToken
-from apps.models_app.user import CustomUser
+from apps.models_app.user import CustomUser, Role, UserRole
 
 from .auth import TokenAuthentication
 from .permissions import IsOwnerOrReadOnly
@@ -26,37 +26,36 @@ from .serializers import (
     CropSerializer,
     CropVarietySerializer,
     DeviceSerializer,
-    EnterprisePlanSerializer,
-    EnterpriseUserPlanSerializer,
     FarmSerializer,
     FeatureSerializer,
     FeatureTypeSerializer,
     FieldIrrigationMethodSerializer,
+    FieldIrrigationPracticeSerializer,
     FieldSerializer,
     LoginSerializer,
-    MainPlanSerializer,
-    MainUserPlanSerializer,
     NotificationSerializer,
     SignUpSerializer,
     SoilReportSerializer,
     SoilTextureSerializer,
     SupportRequestSerializer,
     TokenSerializer,
-    TopUpPlanSerializer,
-    TopUpUserPlanSerializer,
+    PlanSerializer,
+    UserPlanSerializer,
     IrrigationMethodSerializer,
+    PaymentMethodSerializer,
+    TransactionSerializer,
 )
 
 from apps.models_app.assets import Asset
 from apps.models_app.crop_variety import Crop, CropVariety
 from apps.models_app.farm import Farm
-from apps.models_app.field import Field, Device, CropLifecycleDates, FieldIrrigationMethod
+from apps.models_app.field import Field, Device, CropLifecycleDates, FieldIrrigationMethod, FieldIrrigationPractice
 from apps.models_app.feature import Feature, FeatureType
-from apps.models_app.plan import MainPlan, TopUpPlan, EnterprisePlan
-from apps.models_app.user_plan import MainUserPlan, TopUpUserPlan, EnterpriseUserPlan
+from apps.models_app.plan import Plan
+from apps.models_app.user_plan import UserPlan, PaymentMethod, Transaction
 from apps.models_app.notifications import Notification, SupportRequest
 from apps.models_app.irrigation import IrrigationMethods
-from apps.models_app.soil_report import SoilReport
+from apps.models_app.soil_report import SoilReport, SoilTexture
 
 
 class SignUpView(APIView):
@@ -67,6 +66,12 @@ class SignUpView(APIView):
         serializer = SignUpSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        # Ensure default role assignment for end users
+        try:
+            end_role, _ = Role.objects.get_or_create(name="End-App-User")
+            UserRole.objects.get_or_create(user=user, role=end_role, defaults={"userrole_id": user.email or user.username})
+        except Exception:
+            pass
         token_value = secrets.token_urlsafe(48)
         UserAuthToken.objects.update_or_create(user=user, defaults={"access_token": token_value})
         return Response({"user": UserSerializer(user).data, "token": token_value}, status=status.HTTP_201_CREATED)
@@ -79,9 +84,15 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = authenticate(request, email=serializer.validated_data["email"], password=serializer.validated_data["password"])
+        user = authenticate(request, username=serializer.validated_data["username"], password=serializer.validated_data["password"])
         if not user:
             return Response({"detail": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST)
+        # Ensure role exists on first login if missing
+        try:
+            end_role, _ = Role.objects.get_or_create(name="End-App-User")
+            UserRole.objects.get_or_create(user=user, role=end_role, defaults={"userrole_id": user.email or user.username})
+        except Exception:
+            pass
         token_value = secrets.token_urlsafe(48)
         UserAuthToken.objects.update_or_create(user=user, defaults={"access_token": token_value})
         return Response({"token": token_value})
@@ -106,7 +117,7 @@ class MeView(APIView):
 
     def put(self, request):
         user = request.user
-        allowed_fields = {"email", "username", "phone_number", "avatar"}
+        allowed_fields = {"email", "username", "full_name", "phone_number", "avatar"}
         for key, value in request.data.items():
             if key in allowed_fields:
                 setattr(user, key, value)
@@ -149,16 +160,23 @@ class DashboardView(APIView):
         user = request.user
         active_fields = Field.objects.filter(user=user, is_active=True).count()
         active_crops = Field.objects.filter(user=user, crop__isnull=False).select_related("crop").count()
-        plans = MainUserPlan.objects.filter(user=user, is_active=True).select_related("plan")
+        plans = UserPlan.objects.filter(user=user, is_active=True).select_related("plan")
         current_plan = plans.first()
         notifications_count = Notification.objects.filter(receiver=user, is_read=False).count()
+        recent_practices = (
+            FieldIrrigationPracticeSerializer(
+                FieldIrrigationPractice.objects.filter(field__user=user).select_related("field", "irrigation_method").order_by("-performed_at")[:3],
+                many=True,
+            ).data
+        )
         recent_activity = Asset.objects.filter().order_by("-uploaded_at")[:5]
         return Response(
             {
                 "active_fields": active_fields,
                 "active_crops": active_crops,
-                "current_plan": MainUserPlanSerializer(current_plan).data if current_plan else None,
+                "current_plan": UserPlanSerializer(current_plan).data if current_plan else None,
                 "unread_notifications": notifications_count,
+                "current_practices": recent_practices,
                 "recent_activity": AssetSerializer(recent_activity, many=True).data,
             }
         )
@@ -229,8 +247,27 @@ class FieldViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def lifecycle(self, request, pk=None):
         field = self.get_object()
-        data = CropLifecycleDates.objects.filter(field=field).values("sowing_date", "harvesting_date").first()
+        data = CropLifecycleDates.objects.filter(field=field).values(
+            "sowing_date",
+            "growth_start_date",
+            "flowering_date",
+            "harvesting_date",
+            "yield_amount",
+        ).first()
         return Response(data or {})
+
+    @action(detail=True, methods=["post"])
+    def update_lifecycle(self, request, pk=None):
+        field = self.get_object()
+        payload = {
+            "sowing_date": request.data.get("sowing_date"),
+            "growth_start_date": request.data.get("growth_start_date"),
+            "flowering_date": request.data.get("flowering_date"),
+            "harvesting_date": request.data.get("harvesting_date"),
+            "yield_amount": request.data.get("yield_amount"),
+        }
+        obj, _ = CropLifecycleDates.objects.update_or_create(field=field, defaults=payload)
+        return Response(CropLifecycleDatesSerializer(obj).data)
 
 
 class SoilReportViewSet(viewsets.ModelViewSet):
@@ -240,11 +277,25 @@ class SoilReportViewSet(viewsets.ModelViewSet):
     filterset_fields = ["field", "soil_type"]
 
 
+class SoilTextureViewSet(viewsets.ModelViewSet):
+    authentication_classes = [TokenAuthentication]
+    queryset = SoilTexture.objects.all()
+    serializer_class = SoilTextureSerializer
+
+
 class IrrigationMethodViewSet(viewsets.ModelViewSet):
     authentication_classes = [TokenAuthentication]
     queryset = IrrigationMethods.objects.all()
     serializer_class = IrrigationMethodSerializer
     search_fields = ["name"]
+
+
+class FieldIrrigationPracticeViewSet(viewsets.ModelViewSet):
+    authentication_classes = [TokenAuthentication]
+    serializer_class = FieldIrrigationPracticeSerializer
+
+    def get_queryset(self):
+        return FieldIrrigationPractice.objects.filter(field__user=self.request.user).select_related("field", "irrigation_method")
 
 
 class AssetViewSet(viewsets.ModelViewSet):
@@ -304,40 +355,41 @@ class FeatureTypeViewSet(viewsets.ModelViewSet):
     serializer_class = FeatureTypeSerializer
 
 
-class MainPlanViewSet(viewsets.ModelViewSet):
+class PlanViewSet(viewsets.ModelViewSet):
     authentication_classes = [TokenAuthentication]
-    queryset = MainPlan.objects.all()
-    serializer_class = MainPlanSerializer
+    queryset = Plan.objects.all()
+    serializer_class = PlanSerializer
 
 
-class TopUpPlanViewSet(viewsets.ModelViewSet):
+class UserPlanViewSet(viewsets.ModelViewSet):
     authentication_classes = [TokenAuthentication]
-    queryset = TopUpPlan.objects.select_related("parent_main_plan").all()
-    serializer_class = TopUpPlanSerializer
+    queryset = UserPlan.objects.select_related("user", "plan").all()
+    serializer_class = UserPlanSerializer
+
+    def get_queryset(self):
+        return UserPlan.objects.filter(user=self.request.user).select_related("plan")
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
-class EnterprisePlanViewSet(viewsets.ModelViewSet):
+class PaymentMethodViewSet(viewsets.ModelViewSet):
     authentication_classes = [TokenAuthentication]
-    queryset = EnterprisePlan.objects.all()
-    serializer_class = EnterprisePlanSerializer
+    serializer_class = PaymentMethodSerializer
+
+    def get_queryset(self):
+        return PaymentMethod.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
-class MainUserPlanViewSet(viewsets.ModelViewSet):
+class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
     authentication_classes = [TokenAuthentication]
-    queryset = MainUserPlan.objects.select_related("user", "plan").all()
-    serializer_class = MainUserPlanSerializer
+    serializer_class = TransactionSerializer
 
-
-class TopUpUserPlanViewSet(viewsets.ModelViewSet):
-    authentication_classes = [TokenAuthentication]
-    queryset = TopUpUserPlan.objects.select_related("user", "plan").all()
-    serializer_class = TopUpUserPlanSerializer
-
-
-class EnterpriseUserPlanViewSet(viewsets.ModelViewSet):
-    authentication_classes = [TokenAuthentication]
-    queryset = EnterpriseUserPlan.objects.select_related("user", "plan").all()
-    serializer_class = EnterpriseUserPlanSerializer
+    def get_queryset(self):
+        return Transaction.objects.filter(user=self.request.user).select_related("plan")
 
 
 class RazorpayCreateOrderView(APIView):

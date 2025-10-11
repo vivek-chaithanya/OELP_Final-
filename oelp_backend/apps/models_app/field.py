@@ -18,6 +18,7 @@ from .assets_util import asset_upload_to
 from .crop_variety import Crop, CropVariety
 from .farm import Farm
 from .irrigation import IrrigationMethods
+from .soil_report import SoilTexture
 from .user import CustomUser
 
 
@@ -40,6 +41,7 @@ class Field(models.Model):
     boundary = models.JSONField(null=True, blank=True)
     location_name = models.CharField(max_length=255, null=True, blank=True)
     area = models.JSONField(null=True, blank=True)
+    soil_type = models.ForeignKey(SoilTexture, on_delete=models.SET_NULL, null=True, blank=True)
     image = models.ImageField(upload_to=asset_upload_to, blank=True, null=True, storage=ImageStorage())
     is_active = models.BooleanField(default=True)
     is_locked = models.BooleanField(default=False)
@@ -57,10 +59,20 @@ class Field(models.Model):
 class CropLifecycleDates(models.Model):
     field = models.ForeignKey(Field, on_delete=models.CASCADE)
     sowing_date = models.DateField(null=True, blank=True)
+    growth_start_date = models.DateField(null=True, blank=True)
+    flowering_date = models.DateField(null=True, blank=True)
     harvesting_date = models.DateField(null=True, blank=True)
+    yield_amount = models.FloatField(null=True, blank=True, help_text="Total yield for the cycle (tons or units)")
 
 
 class FieldIrrigationMethod(models.Model):
     field = models.ForeignKey(Field, on_delete=models.CASCADE)
     irrigation_method = models.ForeignKey(IrrigationMethods, on_delete=models.CASCADE)
+
+
+class FieldIrrigationPractice(models.Model):
+    field = models.ForeignKey(Field, on_delete=models.CASCADE, related_name="irrigation_practices")
+    irrigation_method = models.ForeignKey(IrrigationMethods, on_delete=models.CASCADE)
+    notes = models.TextField(blank=True, null=True)
+    performed_at = models.DateTimeField(default=timezone.now)
 

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from django.db import models
 
-from .field import Field
-
 
 class SoilTexture(models.Model):
     name = models.CharField(max_length=100)
@@ -14,7 +12,7 @@ class SoilTexture(models.Model):
 
 
 class SoilReport(models.Model):
-    field = models.ForeignKey(Field, on_delete=models.CASCADE, related_name="soilreport")
+    field = models.ForeignKey('Field', on_delete=models.CASCADE, related_name="soilreport")
     ph = models.FloatField()
     ec = models.FloatField()
     nitrogen = models.FloatField(blank=True, null=True)

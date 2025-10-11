@@ -23,6 +23,8 @@ const Fields = () => {
   const [crops, setCrops] = useState<any[]>([]);
   const [varieties, setVarieties] = useState<any[]>([]);
   const [openFieldDialog, setOpenFieldDialog] = useState(false);
+  const [openIrrigationDialog, setOpenIrrigationDialog] = useState(false);
+  const [openSoilReportDialog, setOpenSoilReportDialog] = useState(false);
   const [editingField, setEditingField] = useState<any | null>(null);
   const [formField, setFormField] = useState({
     name: "",
@@ -31,8 +33,13 @@ const Fields = () => {
     crop_variety: "",
     device: "",
     location_name: "",
+    soil_type: "",
     is_active: true,
   });
+  const [irrigationMethods, setIrrigationMethods] = useState<any[]>([]);
+  const [soilTextures, setSoilTextures] = useState<any[]>([]);
+  const [irrigationForm, setIrrigationForm] = useState({ field: "", irrigation_method: "", notes: "" });
+  const [soilForm, setSoilForm] = useState({ field: "", ph: "", ec: "", soil_type: "" });
   const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
   const authHeaders = () => {
     const token = localStorage.getItem("token");
@@ -40,17 +47,21 @@ const Fields = () => {
   };
   const loadData = async () => {
     try {
-      const [fieldsRes, farmsRes, cropsRes, varietiesRes] = await Promise.all([
+      const [fieldsRes, farmsRes, cropsRes, varietiesRes, irrRes, soilTexRes] = await Promise.all([
         fetch(`${API_URL}/fields/`, { headers: authHeaders() }),
         fetch(`${API_URL}/farms/`, { headers: authHeaders() }),
         fetch(`${API_URL}/crops/`, { headers: authHeaders() }),
         fetch(`${API_URL}/crop-varieties/`, { headers: authHeaders() }),
+        fetch(`${API_URL}/irrigation-methods/`, { headers: authHeaders() }),
+        fetch(`${API_URL}/soil-textures/`, { headers: authHeaders() }),
       ]);
       const j = async (r: Response) => (Array.isArray(await r.clone().json().catch(() => [])) ? await r.json() : (await r.json()).results);
       setFields(await j(fieldsRes));
       setFarms(await j(farmsRes));
       setCrops(await j(cropsRes));
       setVarieties(await j(varietiesRes));
+      setIrrigationMethods(await j(irrRes));
+      setSoilTextures(await j(soilTexRes));
     } catch (e: any) {
       toast.error(e.message || "Failed to load data");
     }
@@ -60,9 +71,9 @@ const Fields = () => {
   }, []);
 
   const stats = [
-    { title: "Total Fields", value: "8", subtitle: "25.5 hectares total", icon: MapIcon },
-    { title: "Irrigation Systems", value: "5", subtitle: "3 types in use", icon: Droplets },
-    { title: "Soil Reports", value: "12", subtitle: "Last updated this month", icon: FileText },
+    { title: "Total Fields", value: String(fields.length || 0), subtitle: `${0} acres total`, icon: MapIcon },
+    { title: "Irrigation Systems", value: "0", subtitle: "0 types in use", icon: Droplets },
+    { title: "Soil Reports", value: "0", subtitle: "—", icon: FileText },
   ];
 
   const filteredFields = useMemo(() => {
@@ -132,7 +143,7 @@ const Fields = () => {
               <TableRow>
                 <TableHead>Field Name</TableHead>
                 <TableHead>Size</TableHead>
-                <TableHead>Soil Type</TableHead>
+                  <TableHead>Soil Type</TableHead>
                 <TableHead>Irrigation</TableHead>
                 <TableHead>Soil Health</TableHead>
                 <TableHead>Last Report</TableHead>
@@ -144,7 +155,7 @@ const Fields = () => {
                 <TableRow key={field.id}>
                   <TableCell className="font-medium">{field.name}</TableCell>
                   <TableCell>{field.area?.hectares ? `${field.area.hectares} ha` : "-"}</TableCell>
-                  <TableCell>{field.soilType || "-"}</TableCell>
+                  <TableCell>{field.soil_type_name || "-"}</TableCell>
                   <TableCell>{field.irrigation || "-"}</TableCell>
                   <TableCell>
                     <Badge variant="secondary">—</Badge>
@@ -174,7 +185,7 @@ const Fields = () => {
             <CardDescription>Upload and manage soil reports</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Button className="w-full">
+            <Button className="w-full" onClick={() => setOpenSoilReportDialog(true)}>
               <Plus className="mr-2 h-4 w-4" />
               Generate Soil Report
             </Button>
@@ -191,7 +202,7 @@ const Fields = () => {
             <CardDescription>Manage irrigation systems</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Button className="w-full">
+            <Button className="w-full" onClick={() => setOpenIrrigationDialog(true)}>
               <Droplets className="mr-2 h-4 w-4" />
               Set Irrigation Method
             </Button>
@@ -242,6 +253,13 @@ const Fields = () => {
               </div>
             </div>
             <div className="space-y-2">
+              <Label>Soil Type</Label>
+              <select className="border rounded-md h-10 px-3 w-full" value={formField.soil_type} onChange={(e) => setFormField({ ...formField, soil_type: e.target.value })}>
+                <option value="">None</option>
+                {soilTextures.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+              </select>
+            </div>
+            <div className="space-y-2">
               <Label>Location Name</Label>
               <Input value={formField.location_name} onChange={(e) => setFormField({ ...formField, location_name: e.target.value })} />
             </div>
@@ -255,6 +273,7 @@ const Fields = () => {
                   crop_variety: formField.crop_variety ? Number(formField.crop_variety) : null,
                   device: formField.device ? Number(formField.device) : null,
                   location_name: formField.location_name || null,
+                  soil_type: formField.soil_type ? Number(formField.soil_type) : null,
                   is_active: !!formField.is_active,
                 };
                 const isEdit = !!editingField;
@@ -263,6 +282,94 @@ const Fields = () => {
                 const res = await fetch(url, { method, headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify(payload) });
                 if (res.ok) { toast.success(isEdit ? "Field updated" : "Field created"); setOpenFieldDialog(false); loadData(); } else { const err = await res.json().catch(() => ({})); toast.error(err.detail || "Failed to save field"); }
               }}>{editingField ? "Update" : "Create"}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Irrigation Practice Dialog */}
+      <Dialog open={openIrrigationDialog} onOpenChange={setOpenIrrigationDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record Irrigation Practice</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Field</Label>
+              <select className="border rounded-md h-10 px-3 w-full" value={irrigationForm.field} onChange={(e) => setIrrigationForm({ ...irrigationForm, field: e.target.value })}>
+                <option value="" disabled>Select field</option>
+                {fields.map((f) => (<option key={f.id} value={f.id}>{f.name}</option>))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label>Irrigation Method</Label>
+              <select className="border rounded-md h-10 px-3 w-full" value={irrigationForm.irrigation_method} onChange={(e) => setIrrigationForm({ ...irrigationForm, irrigation_method: e.target.value })}>
+                <option value="" disabled>Select method</option>
+                {irrigationMethods.map((m) => (<option key={m.id} value={m.id}>{m.name}</option>))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Input value={irrigationForm.notes} onChange={(e) => setIrrigationForm({ ...irrigationForm, notes: e.target.value })} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpenIrrigationDialog(false)}>Cancel</Button>
+              <Button onClick={async () => {
+                if (!irrigationForm.field || !irrigationForm.irrigation_method) { toast.error("Select field and method"); return; }
+                const res = await fetch(`${API_URL}/irrigation-practices/`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", ...authHeaders() },
+                  body: JSON.stringify({ field: Number(irrigationForm.field), irrigation_method: Number(irrigationForm.irrigation_method), notes: irrigationForm.notes || null }),
+                });
+                if (res.ok) { toast.success("Practice recorded"); setOpenIrrigationDialog(false); } else { toast.error("Failed to record practice"); }
+              }}>Save</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Soil Report Dialog */}
+      <Dialog open={openSoilReportDialog} onOpenChange={setOpenSoilReportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate Soil Report</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Field</Label>
+              <select className="border rounded-md h-10 px-3 w-full" value={soilForm.field} onChange={(e) => setSoilForm({ ...soilForm, field: e.target.value })}>
+                <option value="" disabled>Select field</option>
+                {fields.map((f) => (<option key={f.id} value={f.id}>{f.name}</option>))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <Label>pH</Label>
+                <Input type="number" step="0.01" value={soilForm.ph} onChange={(e) => setSoilForm({ ...soilForm, ph: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>EC</Label>
+                <Input type="number" step="0.01" value={soilForm.ec} onChange={(e) => setSoilForm({ ...soilForm, ec: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Soil Type</Label>
+              <select className="border rounded-md h-10 px-3 w-full" value={soilForm.soil_type} onChange={(e) => setSoilForm({ ...soilForm, soil_type: e.target.value })}>
+                <option value="" disabled>Select texture</option>
+                {soilTextures.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpenSoilReportDialog(false)}>Cancel</Button>
+              <Button onClick={async () => {
+                if (!soilForm.field || !soilForm.ph || !soilForm.ec || !soilForm.soil_type) { toast.error("Fill all required fields"); return; }
+                const res = await fetch(`${API_URL}/soil-reports/`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", ...authHeaders() },
+                  body: JSON.stringify({ field: Number(soilForm.field), ph: Number(soilForm.ph), ec: Number(soilForm.ec), soil_type: Number(soilForm.soil_type) }),
+                });
+                if (res.ok) { toast.success("Soil report created"); setOpenSoilReportDialog(false); } else { toast.error("Failed to create report"); }
+              }}>Generate</Button>
             </div>
           </div>
         </DialogContent>

@@ -10,20 +10,22 @@ import { toast } from "sonner";
 
 const Login = () => {
   const navigate = useNavigate();
-  const [loginData, setLoginData] = useState({ email: "", password: "" });
+  const [loginData, setLoginData] = useState({ username: "", password: "" });
   const [signupData, setSignupData] = useState({
-    name: "",
-    email: "",
-    phone: "",
+    username: "",
+    full_name: "",
+    phone_number: "",
     password: "",
     confirmPassword: "",
+    google_id: "",
+    avatar: "",
   });
 
   const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginData.email || !loginData.password) {
+    if (!loginData.username || !loginData.password) {
       toast.error("Please fill in all fields");
       return;
     }
@@ -46,7 +48,7 @@ const Login = () => {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!signupData.name || !signupData.email || !signupData.password) {
+    if (!signupData.username || !signupData.full_name || !signupData.phone_number || !signupData.password) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -63,7 +65,14 @@ const Login = () => {
       const res = await fetch(`${API_URL}/auth/signup/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: signupData.email, username: signupData.name, phone_number: signupData.phone, password: signupData.password }),
+        body: JSON.stringify({
+          username: signupData.username,
+          full_name: signupData.full_name,
+          phone_number: signupData.phone_number,
+          password: signupData.password,
+          google_id: signupData.google_id || undefined,
+          avatar: signupData.avatar || undefined,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -72,7 +81,7 @@ const Login = () => {
         setTimeout(() => navigate("/dashboard"), 800);
       } else {
         const err = await res.json().catch(() => ({}));
-        const firstFieldError = err?.email?.[0] || err?.username?.[0] || err?.password?.[0] || err?.phone_number?.[0];
+        const firstFieldError = err?.username?.[0] || err?.full_name?.[0] || err?.password?.[0] || err?.phone_number?.[0];
         toast.error(err.detail || firstFieldError || `Signup failed (${res.status})`);
       }
     } catch (error: any) {
@@ -104,16 +113,16 @@ const Login = () => {
             <TabsContent value="login">
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="username">Username</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
-                      id="email"
-                      type="email"
-                      placeholder="your.name@agriplatform.com"
+                      id="username"
+                      type="text"
+                      placeholder="yourusername"
                       className="pl-10"
-                      value={loginData.email}
-                      onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+                      value={loginData.username}
+                      onChange={(e) => setLoginData({ ...loginData, username: e.target.value })}
                     />
                   </div>
                 </div>
@@ -139,46 +148,55 @@ const Login = () => {
             <TabsContent value="signup">
               <form onSubmit={handleSignup} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
+                  <Label htmlFor="username">Username</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
-                      id="name"
+                      id="username"
                       type="text"
-                      placeholder="John Farmer"
+                      placeholder="yourusername"
                       className="pl-10"
-                      value={signupData.name}
-                      onChange={(e) => setSignupData({ ...signupData, name: e.target.value })}
+                      value={signupData.username}
+                      onChange={(e) => setSignupData({ ...signupData, username: e.target.value })}
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
+                  <Label htmlFor="full_name">Full Name</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
-                      id="signup-email"
-                      type="email"
-                      placeholder="your.name@agriplatform.com"
+                      id="full_name"
+                      type="text"
+                      placeholder="John Farmer"
                       className="pl-10"
-                      value={signupData.email}
-                      onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
+                      value={signupData.full_name}
+                      onChange={(e) => setSignupData({ ...signupData, full_name: e.target.value })}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">Will be converted to @agriplatform.com</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number (Optional)</Label>
+                  <Label htmlFor="phone_number">Phone Number</Label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
-                      id="phone"
+                      id="phone_number"
                       type="tel"
                       placeholder="+1 (555) 123-4567"
                       className="pl-10"
-                      value={signupData.phone}
-                      onChange={(e) => setSignupData({ ...signupData, phone: e.target.value })}
+                      value={signupData.phone_number}
+                      onChange={(e) => setSignupData({ ...signupData, phone_number: e.target.value })}
                     />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="google_id">Google ID (optional)</Label>
+                    <Input id="google_id" value={signupData.google_id} onChange={(e) => setSignupData({ ...signupData, google_id: (e.target as HTMLInputElement).value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="avatar">Avatar URL (optional)</Label>
+                    <Input id="avatar" value={signupData.avatar} onChange={(e) => setSignupData({ ...signupData, avatar: (e.target as HTMLInputElement).value })} />
                   </div>
                 </div>
                 <div className="space-y-2">
