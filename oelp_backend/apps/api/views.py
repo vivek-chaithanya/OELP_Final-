@@ -370,7 +370,18 @@ class UserPlanViewSet(viewsets.ModelViewSet):
         return UserPlan.objects.filter(user=self.request.user).select_related("plan")
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        user_plan = serializer.save(user=self.request.user)
+        try:
+            # Record a simple transaction entry for the selected plan
+            Transaction.objects.create(
+                user=self.request.user,
+                plan=user_plan.plan,
+                amount=user_plan.plan.price,
+                currency="USD",
+                status="paid",
+            )
+        except Exception:
+            pass
 
 
 class PaymentMethodViewSet(viewsets.ModelViewSet):
