@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Download, FileDown, TrendingUp } from "lucide-react";
@@ -13,6 +14,10 @@ import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 const Reports = () => {
+  const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const authHeaders = token ? { Authorization: `Token ${token}` } : {};
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const stats = [
     { title: "Total Yield", value: "146.1 tons", change: "+12% from last quarter", icon: TrendingUp },
     { title: "Revenue", value: "$91,700", change: "+8% from last quarter" },
@@ -71,14 +76,37 @@ const Reports = () => {
           <h1 className="text-3xl font-bold">Reports & Analytics</h1>
           <p className="text-muted-foreground">Comprehensive insights into your farming operations</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
-            <FileDown className="mr-2 h-4 w-4" />
-            Date Range
-          </Button>
-          <Button>
+        <div className="flex gap-2 items-center">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-muted-foreground">Start</label>
+            <input type="date" className="border rounded h-9 px-2" value={dateRange.start} onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })} />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-muted-foreground">End</label>
+            <input type="date" className="border rounded h-9 px-2" value={dateRange.end} onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })} />
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => {
+              const qs = new URLSearchParams();
+              if (dateRange.start) qs.set('start_date', dateRange.start);
+              if (dateRange.end) qs.set('end_date', dateRange.end);
+              window.open(`${API_URL}/reports/export/csv/?${qs.toString()}`, '_blank');
+            }}
+          >
             <Download className="mr-2 h-4 w-4" />
-            Export All
+            Download CSV
+          </Button>
+          <Button
+            onClick={() => {
+              const qs = new URLSearchParams();
+              if (dateRange.start) qs.set('start_date', dateRange.start);
+              if (dateRange.end) qs.set('end_date', dateRange.end);
+              window.open(`${API_URL}/reports/export/pdf/?${qs.toString()}`, '_blank');
+            }}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export PDF
           </Button>
         </div>
       </div>

@@ -27,10 +27,13 @@ const Crops = () => {
   const [varieties, setVarieties] = useState<{ id: number; crop: number; name: string; is_primary: boolean }[]>([]);
   const [openCropDialog, setOpenCropDialog] = useState(false);
   const [openVarietyDialog, setOpenVarietyDialog] = useState(false);
+  const [openLifecycleDialog, setOpenLifecycleDialog] = useState(false);
   const [editingCrop, setEditingCrop] = useState<{ id: number; name: string; icon_url?: string | null } | null>(null);
   const [editingVariety, setEditingVariety] = useState<{ id: number; crop: number; name: string; is_primary: boolean } | null>(null);
   const [formCrop, setFormCrop] = useState({ name: "", icon_url: "" });
   const [formVariety, setFormVariety] = useState({ crop: "", name: "", is_primary: false });
+  const [fields, setFields] = useState<any[]>([]);
+  const [lifecycle, setLifecycle] = useState({ field: "", sowing_date: "", growth_start_date: "", flowering_date: "", harvesting_date: "", yield_amount: "" });
 
   const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
 
@@ -41,18 +44,23 @@ const Crops = () => {
 
   const loadData = async () => {
     try {
-      const [cropsRes, varietiesRes] = await Promise.all([
+      const [cropsRes, varietiesRes, fieldsRes] = await Promise.all([
         fetch(`${API_URL}/crops/`, { headers: { "Content-Type": "application/json", ...authHeaders() } }),
         fetch(`${API_URL}/crop-varieties/`, { headers: { "Content-Type": "application/json", ...authHeaders() } }),
+        fetch(`${API_URL}/fields/`, { headers: { "Content-Type": "application/json", ...authHeaders() } }),
       ]);
       if (!cropsRes.ok) throw new Error("Failed to load crops");
       if (!varietiesRes.ok) throw new Error("Failed to load varieties");
+      if (!fieldsRes.ok) throw new Error("Failed to load fields");
       const cropsData = await cropsRes.json();
       const varietiesData = await varietiesRes.json();
+      const fieldsData = await fieldsRes.json();
       const cropsItems = Array.isArray(cropsData.results) ? cropsData.results : cropsData;
       const varietyItems = Array.isArray(varietiesData.results) ? varietiesData.results : varietiesData;
+      const fieldsItems = Array.isArray(fieldsData.results) ? fieldsData.results : fieldsData;
       setCrops(cropsItems);
       setVarieties(varietyItems);
+      setFields(fieldsItems);
     } catch (e: any) {
       toast.error(e.message || "Failed to load data");
     }
@@ -60,6 +68,8 @@ const Crops = () => {
 
   useEffect(() => {
     loadData();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('dialog') === 'add') setOpenCropDialog(true);
   }, []);
 
   const lifecycleStages = [
@@ -122,6 +132,42 @@ const Crops = () => {
     } else {
       const err = await res.json().catch(() => ({}));
       toast.error(err.detail || "Failed to save crop");
+    }
+  };
+
+  const sampleCrops: Record<string, string> = {
+    Wheat: "https://img.icons8.com/?size=100&id=sG7uHhOyoJxY&format=png",
+    Corn: "https://img.icons8.com/?size=100&id=Y1c3gJHn5yXn&format=png",
+    Rice: "https://img.icons8.com/?size=100&id=eiwHws37JfSC&format=png",
+    Tomato: "https://img.icons8.com/?size=100&id=6mV0h3PZLw8s&format=png",
+    Soybean: "https://img.icons8.com/?size=100&id=MkqY0b1GQkUR&format=png",
+  };
+
+  const applySampleCrop = (name: string) => {
+    setFormCrop({ name, icon_url: sampleCrops[name] || "" });
+  };
+
+  const submitLifecycle = async () => {
+    if (!lifecycle.field) {
+      toast.error("Select a field");
+      return;
+    }
+    const res = await fetch(`${API_URL}/fields/${lifecycle.field}/update_lifecycle/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({
+        sowing_date: lifecycle.sowing_date || null,
+        growth_start_date: lifecycle.growth_start_date || null,
+        flowering_date: lifecycle.flowering_date || null,
+        harvesting_date: lifecycle.harvesting_date || null,
+        yield_amount: lifecycle.yield_amount ? Number(lifecycle.yield_amount) : null,
+      }),
+    });
+    if (res.ok) {
+      toast.success("Lifecycle updated");
+      setOpenLifecycleDialog(false);
+    } else {
+      toast.error("Failed to update lifecycle");
     }
   };
 
@@ -251,13 +297,13 @@ const Crops = () => {
       </Card>
 
       <Card>
-        <CardHeader>
+            <CardHeader>
           <div className="flex justify-between items-center">
             <div>
               <CardTitle>Lifecycle Management</CardTitle>
               <CardDescription>Track and update crop lifecycle stages</CardDescription>
             </div>
-            <Button>Update Lifecycle</Button>
+            <Button onClick={() => setOpenLifecycleDialog(true)}>Update Lifecycle</Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -285,7 +331,13 @@ const Crops = () => {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input value={formCrop.name} onChange={(e) => setFormCrop({ ...formCrop, name: e.target.value })} />
+              <div className="grid grid-cols-2 gap-2">
+                <Input value={formCrop.name} onChange={(e) => setFormCrop({ ...formCrop, name: e.target.value })} />
+                <select className="border rounded-md h-10 px-3" onChange={(e) => applySampleCrop(e.target.value)} defaultValue="">
+                  <option value="" disabled>Choose sample</option>
+                  {Object.keys(sampleCrops).map((n) => (<option key={n} value={n}>{n}</option>))}
+                </select>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Icon URL</Label>
@@ -294,6 +346,49 @@ const Crops = () => {
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setOpenCropDialog(false)}>Cancel</Button>
               <Button onClick={submitCrop}>{editingCrop ? "Update" : "Create"}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={openLifecycleDialog} onOpenChange={setOpenLifecycleDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Lifecycle</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Field</Label>
+              <select className="border rounded-md h-10 px-3 w-full" value={lifecycle.field} onChange={(e) => setLifecycle({ ...lifecycle, field: e.target.value })}>
+                <option value="" disabled>Select field</option>
+                {fields.map((f) => (<option key={f.id} value={f.id}>{f.name}</option>))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label>Sowing Date</Label>
+                <Input type="date" value={lifecycle.sowing_date} onChange={(e) => setLifecycle({ ...lifecycle, sowing_date: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <Label>Growth Start</Label>
+                <Input type="date" value={lifecycle.growth_start_date} onChange={(e) => setLifecycle({ ...lifecycle, growth_start_date: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <Label>Flowering Date</Label>
+                <Input type="date" value={lifecycle.flowering_date} onChange={(e) => setLifecycle({ ...lifecycle, flowering_date: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <Label>Harvesting Date</Label>
+                <Input type="date" value={lifecycle.harvesting_date} onChange={(e) => setLifecycle({ ...lifecycle, harvesting_date: e.target.value })} />
+              </div>
+              <div className="space-y-1 col-span-2">
+                <Label>Yield</Label>
+                <Input type="number" placeholder="0" value={lifecycle.yield_amount} onChange={(e) => setLifecycle({ ...lifecycle, yield_amount: e.target.value })} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpenLifecycleDialog(false)}>Cancel</Button>
+              <Button onClick={submitLifecycle}>Save</Button>
             </div>
           </div>
         </DialogContent>

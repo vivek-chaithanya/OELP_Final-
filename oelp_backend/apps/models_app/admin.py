@@ -5,22 +5,21 @@ from django.contrib import admin
 from .assets import Asset
 from .crop_variety import Crop, CropVariety
 from .farm import Farm
-from .field import Field, Device, CropLifecycleDates, FieldIrrigationMethod
+from .field import Field, Device, CropLifecycleDates, FieldIrrigationMethod, FieldIrrigationPractice
 from .feature import FeatureType, Feature
-from .feature_plan import MainPlanFeature, TopUpPlanFeature, EnterprisePlanFeature
+from .feature_plan import PlanFeature
 from .irrigation import IrrigationMethods
 from .notifications import Notification, SupportRequest
-from .plan import MainPlan, TopUpPlan, EnterprisePlan
+from .plan import Plan
 from .soil_report import SoilTexture, SoilReport
 from .token import UserAuthToken
 from .user import CustomUser, Role, UserRole
+from .models import UserActivity
 from .user_plan import (
-    MainUserPlan,
-    TopUpUserPlan,
-    EnterpriseUserPlan,
-    MainPlanFeatureUsage,
-    TopUpPlanFeatureUsage,
-    EnterprisePlanFeatureUsage,
+    UserPlan,
+    PlanFeatureUsage,
+    PaymentMethod,
+    Transaction,
 )
 
 
@@ -44,6 +43,7 @@ class UserAuthTokenAdmin(admin.ModelAdmin):
 
 admin.site.register(Role)
 admin.site.register(UserRole)
+admin.site.register(UserActivity)
 
 
 @admin.register(Asset)
@@ -86,6 +86,7 @@ class FieldAdmin(admin.ModelAdmin):
 
 admin.site.register(CropLifecycleDates)
 admin.site.register(FieldIrrigationMethod)
+admin.site.register(FieldIrrigationPractice)
 
 
 @admin.register(IrrigationMethods)
@@ -116,32 +117,18 @@ class FeatureAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
-@admin.register(MainPlan)
-class MainPlanAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "price", "duration")
+@admin.register(Plan)
+class PlanAdmin(admin.ModelAdmin):
+    list_display = ("id", "name", "type", "price", "duration")
 
 
-@admin.register(TopUpPlan)
-class TopUpPlanAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "price", "parent_main_plan", "duration")
+admin.site.register(PlanFeature)
 
 
-@admin.register(EnterprisePlan)
-class EnterprisePlanAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "price", "duration")
-
-
-admin.site.register(MainPlanFeature)
-admin.site.register(TopUpPlanFeature)
-admin.site.register(EnterprisePlanFeature)
-
-
-admin.site.register(MainUserPlan)
-admin.site.register(TopUpUserPlan)
-admin.site.register(EnterpriseUserPlan)
-admin.site.register(MainPlanFeatureUsage)
-admin.site.register(TopUpPlanFeatureUsage)
-admin.site.register(EnterprisePlanFeatureUsage)
+admin.site.register(UserPlan)
+admin.site.register(PlanFeatureUsage)
+admin.site.register(PaymentMethod)
+admin.site.register(Transaction)
 
 
 @admin.register(Notification)
