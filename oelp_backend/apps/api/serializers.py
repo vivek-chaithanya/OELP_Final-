@@ -32,6 +32,10 @@ class UserSerializer(serializers.ModelSerializer):
 
 class SignUpSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
+    # Enforce required user fields per product requirements
+    username = serializers.CharField(required=True, allow_blank=False)
+    full_name = serializers.CharField(required=True, allow_blank=False)
+    phone_number = serializers.CharField(required=True, allow_blank=False)
 
     class Meta:
         model = CustomUser

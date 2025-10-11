@@ -9,11 +9,12 @@ import { toast } from "sonner";
 
 const Settings = () => {
   const [profile, setProfile] = useState({
-    username: "",
+    full_name: "",
     email: "",
     phone_number: "",
     avatar: "",
   });
+  const [editMode, setEditMode] = useState(false);
   const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
   const authHeaders = () => {
     const token = localStorage.getItem("token");
@@ -25,7 +26,7 @@ const Settings = () => {
         const res = await fetch(`${API_URL}/auth/me/`, { headers: authHeaders() });
         if (res.ok) {
           const data = await res.json();
-          setProfile({ username: data.username || "", email: data.email || "", phone_number: data.phone_number || "", avatar: data.avatar || "" });
+          setProfile({ full_name: data.full_name || "", email: data.email || "", phone_number: data.phone_number || "", avatar: data.avatar || "" });
         }
       } catch {}
     };
@@ -51,10 +52,6 @@ const Settings = () => {
     weather: true,
   });
 
-  const handleSaveAll = () => {
-    handleUpdateProfile();
-  };
-
   const handleUpdateProfile = () => {
     fetch(`${API_URL}/auth/me/`, {
       method: "PUT",
@@ -63,6 +60,7 @@ const Settings = () => {
     }).then(async (r) => {
       if (r.ok) {
         toast.success("Profile updated successfully!");
+        setEditMode(false);
       } else {
         const err = await r.json().catch(() => ({}));
         toast.error(err.detail || "Failed to update profile");
@@ -114,39 +112,31 @@ const Settings = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="fullName">Full Name</Label>
-              <Input
-                id="fullName"
-                value={profile.username}
-                onChange={(e) => setProfile({ ...profile, username: e.target.value })}
-              />
+              <Input id="fullName" value={profile.full_name} onChange={(e) => setProfile({ ...profile, full_name: e.target.value })} disabled={!editMode} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
-              <Input
-                id="email"
-                type="email"
-                value={profile.email}
-                onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-              />
+              <Input id="email" type="email" value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} disabled />
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Phone Number</Label>
-              <Input
-                id="phone"
-                value={profile.phone_number}
-                onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })}
-              />
+              <Input id="phone" value={profile.phone_number} onChange={(e) => setProfile({ ...profile, phone_number: e.target.value })} disabled={!editMode} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="location">Avatar URL</Label>
-              <Input
-                id="location"
-                value={profile.avatar}
-                onChange={(e) => setProfile({ ...profile, avatar: e.target.value })}
-              />
+              <Input id="location" value={profile.avatar} onChange={(e) => setProfile({ ...profile, avatar: e.target.value })} disabled={!editMode} />
             </div>
           </div>
-          <Button onClick={handleUpdateProfile}>Update Profile</Button>
+          <div className="flex gap-2">
+            {!editMode ? (
+              <Button onClick={() => setEditMode(true)}>Update Profile</Button>
+            ) : (
+              <>
+                <Button onClick={handleUpdateProfile}>Save Profile</Button>
+                <Button variant="outline" onClick={() => setEditMode(false)}>Cancel</Button>
+              </>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -286,9 +276,7 @@ const Settings = () => {
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSaveAll} size="lg">Save All Settings</Button>
-      </div>
+      {/* Removed global Save All Settings per requirements */}
     </div>
   );
 };
