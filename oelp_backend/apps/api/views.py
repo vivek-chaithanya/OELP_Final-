@@ -433,10 +433,28 @@ class ExportCSVView(APIView):
     authentication_classes = [TokenAuthentication]
 
     def get(self, request):
+        # Optional date filters (YYYY-MM-DD)
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
+        start_date = None
+        end_date = None
+        try:
+            if start_date_str:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            if end_date_str:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        except Exception:
+            pass
+
         buffer = io.StringIO()
         writer = csv.writer(buffer)
         writer.writerow(["Field", "Crop", "Hectares"])
-        for fld in Field.objects.filter(user=request.user):
+        queryset = Field.objects.filter(user=request.user)
+        if start_date:
+            queryset = queryset.filter(updated_at__date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(updated_at__date__lte=end_date)
+        for fld in queryset:
             hectares = (fld.area or {}).get("hectares")
             writer.writerow([fld.name, getattr(fld.crop, "name", "-"), hectares])
         buffer.seek(0)
@@ -449,14 +467,30 @@ class ExportPDFView(APIView):
     authentication_classes = [TokenAuthentication]
 
     def get(self, request):
-        # Minimal PDF export placeholder
+        # Minimal PDF export with optional date filter
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
+        start_date = None
+        end_date = None
+        try:
+            if start_date_str:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            if end_date_str:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        except Exception:
+            pass
         from reportlab.pdfgen import canvas
 
         buffer = io.BytesIO()
         p = canvas.Canvas(buffer)
         p.drawString(100, 800, "OELP Report")
         y = 760
-        for fld in Field.objects.filter(user=request.user)[:30]:
+        queryset = Field.objects.filter(user=request.user)
+        if start_date:
+            queryset = queryset.filter(updated_at__date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(updated_at__date__lte=end_date)
+        for fld in queryset[:30]:
             p.drawString(100, y, f"Field: {fld.name}")
             y -= 20
         p.showPage()

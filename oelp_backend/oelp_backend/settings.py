@@ -86,19 +86,9 @@ FORCED_ENGINE = (
     "django.contrib.gis.db.backends.postgis" if USE_POSTGIS else "django.db.backends.postgresql"
 )
 
-# Easy local dev fallback to SQLite if desired
-USE_SQLITE = os.getenv("USE_SQLITE", "false").lower() == "true"
-
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-if USE_SQLITE:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
-elif DATABASE_URL:
+if DATABASE_URL:
     # Force the engine unless PostGIS is explicitly requested, so local dev
     # won't require the PostGIS extension.
     DATABASES = {
