@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,35 @@ import { Progress } from "@/components/ui/progress";
 
 const Practices = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
+  const authHeaders = () => {
+    const token = localStorage.getItem("token");
+    return token ? { Authorization: `Token ${token}` } : {};
+  };
+  const [practices, setPractices] = useState<any[]>([]);
+  const [fields, setFields] = useState<any[]>([]);
+  const [methods, setMethods] = useState<any[]>([]);
+  const [openAdd, setOpenAdd] = useState(false);
+  const [form, setForm] = useState({ field: "", irrigation_method: "", notes: "" });
+
+  const load = async () => {
+    try {
+      const [pRes, fRes, mRes] = await Promise.all([
+        fetch(`${API_URL}/irrigation-practices/`, { headers: authHeaders() }),
+        fetch(`${API_URL}/fields/`, { headers: authHeaders() }),
+        fetch(`${API_URL}/irrigation-methods/`, { headers: authHeaders() }),
+      ]);
+      const j = async (r: Response) => (Array.isArray(await r.clone().json().catch(() => [])) ? await r.json() : (await r.json()).results);
+      setPractices(await j(pRes));
+      setFields(await j(fRes));
+      setMethods(await j(mRes));
+    } catch {}
+  };
+  useEffect(() => {
+    load();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('dialog') === 'add') setOpenAdd(true);
+  }, []);
 
   const stats = [
     { label: "Total Practices", value: "18" },
@@ -24,12 +53,14 @@ const Practices = () => {
     { label: "Overdue", value: "1" },
   ];
 
-  const practices = [
-    { id: 1, name: "Wheat Fertilization", crop: "Wheat", stage: "Growth", status: "Completed", dueDate: "2024-01-10" },
-    { id: 2, name: "Corn Irrigation", crop: "Corn", stage: "Seedling", status: "In Progress", dueDate: "2024-01-25" },
-    { id: 3, name: "Rice Pest Control", crop: "Rice", stage: "Flowering", status: "Pending", dueDate: "2024-01-30" },
-    { id: 4, name: "Tomato Pruning", crop: "Tomato", stage: "Vegetative", status: "Overdue", dueDate: "2024-01-15" },
-  ];
+  const rows = useMemo(() => practices.map((p: any) => ({
+    id: p.id,
+    name: p.method_name || methods.find((m: any) => m.id === p.irrigation_method)?.name || 'Irrigation',
+    crop: fields.find((f: any) => f.id === p.field)?.crop_name || '-',
+    stage: '-',
+    status: new Date(p.performed_at).toLocaleString(),
+    dueDate: '-',
+  })), [practices, fields, methods]);
 
   const lifecycleStages = [
     { stage: "Seed Preparation", crops: 2, completion: 100 },
@@ -56,7 +87,7 @@ const Practices = () => {
           <h1 className="text-3xl font-bold">Practices & Lifecycle</h1>
           <p className="text-muted-foreground">Track and manage your farming activities</p>
         </div>
-        <Button>
+        <Button onClick={() => setOpenAdd(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Add Practice
         </Button>
@@ -107,17 +138,17 @@ const Practices = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {practices.map((practice) => (
+              {rows.map((practice) => (
                 <TableRow key={practice.id}>
                   <TableCell className="font-medium">{practice.name}</TableCell>
                   <TableCell>{practice.crop}</TableCell>
                   <TableCell>{practice.stage}</TableCell>
                   <TableCell>
-                    <Badge variant={getStatusColor(practice.status)}>{practice.status}</Badge>
+                    <Badge variant={getStatusColor('In Progress')}>{practice.status}</Badge>
                   </TableCell>
                   <TableCell>{practice.dueDate}</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm">Update Status</Button>
+                    <Button variant="ghost" size="sm" onClick={() => {}} disabled>Update Status</Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -148,6 +179,41 @@ const Practices = () => {
           </div>
         </CardContent>
       </Card>
+      {/* Add Practice Dialog */}
+      <div className={`fixed inset-0 ${openAdd ? '' : 'hidden'}`}>
+        <div className="absolute inset-0 bg-black/30" onClick={() => setOpenAdd(false)}></div>
+        <div className="absolute right-0 top-0 h-full w-full max-w-md bg-background p-6 shadow-xl">
+          <h3 className="text-lg font-semibold mb-4">Record Practice</h3>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm">Field</label>
+              <select className="border rounded h-10 w-full px-3" value={form.field} onChange={(e) => setForm({ ...form, field: e.target.value })}>
+                <option value="" disabled>Select field</option>
+                {fields.map((f) => (<option key={f.id} value={f.id}>{f.name}</option>))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm">Irrigation Method</label>
+              <select className="border rounded h-10 w-full px-3" value={form.irrigation_method} onChange={(e) => setForm({ ...form, irrigation_method: e.target.value })}>
+                <option value="" disabled>Select method</option>
+                {methods.map((m) => (<option key={m.id} value={m.id}>{m.name}</option>))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm">Notes</label>
+              <input className="border rounded h-10 w-full px-3" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setOpenAdd(false)}>Cancel</Button>
+              <Button onClick={async () => {
+                if (!form.field || !form.irrigation_method) return;
+                const res = await fetch(`${API_URL}/irrigation-practices/`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ field: Number(form.field), irrigation_method: Number(form.irrigation_method), notes: form.notes || null }) });
+                if (res.ok) { setOpenAdd(false); load(); }
+              }}>Save</Button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

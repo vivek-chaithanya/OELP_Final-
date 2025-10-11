@@ -1,30 +1,43 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Sprout, CreditCard, Map, Plus, FileText, Upload, BarChart } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
   const navigate = useNavigate();
 
-  const stats = [
-    { title: "Active Crops", value: "12", icon: Sprout, description: "Currently growing", onClick: () => navigate("/crops") },
-    { title: "Current Subscription", value: "Premium", icon: CreditCard, description: "Expires Feb 2025", onClick: () => navigate("/subscriptions") },
-    { title: "Total Fields", value: "25.5 hectares", icon: Map, description: "8 fields", onClick: () => navigate("/fields") },
-  ];
+  const [stats, setStats] = useState([
+    { title: "Active Crops", value: "0", icon: Sprout, description: "Currently growing", onClick: () => navigate("/crops") },
+    { title: "Current Subscription", value: "Free", icon: CreditCard, description: "—", onClick: () => navigate("/subscriptions") },
+    { title: "Total Fields", value: "0 acres", icon: Map, description: "0 fields", onClick: () => navigate("/fields") },
+  ]);
+  const [practices, setPractices] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
-  const practices = [
-    { name: "Wheat Irrigation", status: "Today", field: "Field A1 irrigated", time: "2 hours ago" },
-    { name: "Corn Fertilization", status: "Due Tomorrow", field: "Soil report uploaded", time: "1 day ago" },
-    { name: "Soil Testing", status: "This Week", field: "New crop variety added", time: "3 days ago" },
-  ];
+  useEffect(() => {
+    const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
+    const token = localStorage.getItem("token");
+    fetch(`${API_URL}/dashboard/`, { headers: { ...(token ? { Authorization: `Token ${token}` } : {}) } })
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        const activeCrops = Number(data.active_crops || 0);
+        const fieldsCount = Number(data.active_fields || 0);
+        const planLabel = data.current_plan?.plan_name || "Free";
+        setStats([
+          { title: "Active Crops", value: String(activeCrops), icon: Sprout, description: "Currently growing", onClick: () => navigate("/crops") },
+          { title: "Current Subscription", value: planLabel, icon: CreditCard, description: "—", onClick: () => navigate("/subscriptions") },
+          { title: "Total Fields", value: `${0} acres`, icon: Map, description: `${fieldsCount} fields`, onClick: () => navigate("/fields") },
+        ]);
+        setPractices(data.current_practices || []);
+        setRecentActivity((data.recent_activity || []).map((a: any) => ({ action: a.file, time: new Date(a.uploaded_at).toLocaleString() })));
+      })
+      .catch(() => {});
+  }, []);
 
-  const recentActivity = [
-    { action: "Field A1 irrigated", time: "2 hours ago" },
-    { action: "Soil report uploaded", time: "1 day ago" },
-    { action: "New crop variety added", time: "3 days ago" },
-    { action: "Subscription renewed", time: "5 days ago" },
-    { action: "Harvest completed - Field B2", time: "1 week ago" },
-  ];
+  const practiceRow = (p: any) => ({ name: p.method_name || "Irrigation", status: new Date(p.performed_at).toLocaleString(), field: p.field_name, time: "" });
+
 
   return (
     <div className="space-y-6">
@@ -106,15 +119,15 @@ const Dashboard = () => {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Button variant="outline" className="h-24 flex-col gap-2">
+            <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => navigate('/crops?dialog=add')}>
               <Plus className="h-5 w-5" />
               <span>Add New Crop</span>
             </Button>
-            <Button variant="outline" className="h-24 flex-col gap-2">
+            <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => navigate('/practices?dialog=add')}>
               <FileText className="h-5 w-5" />
               <span>Record Practice</span>
             </Button>
-            <Button variant="outline" className="h-24 flex-col gap-2">
+            <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => navigate('/fields?dialog=soil')}>
               <Upload className="h-5 w-5" />
               <span>Generate Soil Report</span>
             </Button>
