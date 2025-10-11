@@ -68,6 +68,8 @@ const Fields = () => {
   };
   useEffect(() => {
     loadData();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('dialog') === 'soil') setOpenSoilReportDialog(true);
   }, []);
 
   const stats = [

@@ -44,6 +44,8 @@ export function Layout({ children }: LayoutProps) {
   const [showSupportDialog, setShowSupportDialog] = useState(false);
   const [supportData, setSupportData] = useState({ category: "", description: "" });
   const [me, setMe] = useState<{ full_name?: string; email?: string } | null>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
@@ -53,6 +55,17 @@ export function Layout({ children }: LayoutProps) {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setMe(d))
       .catch(() => {});
+    const loadNotifications = async () => {
+      try {
+        const res = await fetch(`${API_URL}/notifications/`, { headers: { Authorization: `Token ${token}` } });
+        if (res.ok) {
+          const data = await res.json();
+          const items = Array.isArray(data.results) ? data.results : data;
+          setNotifications(items.slice(0, 5));
+        }
+      } catch {}
+    };
+    loadNotifications();
   }, []);
 
   const handleLogout = () => {
@@ -90,10 +103,25 @@ export function Layout({ children }: LayoutProps) {
           <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-card px-6">
             <SidebarTrigger className="text-primary" />
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-5 w-5" />
-                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-accent"></span>
-              </Button>
+              <DropdownMenu open={showNotifications} onOpenChange={setShowNotifications}>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="relative">
+                    <Bell className="h-5 w-5" />
+                    {notifications.length === 0 && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-muted"></span>}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80">
+                  <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                  <div className="px-2 py-1 text-sm text-muted-foreground">
+                    {notifications.length === 0 ? "No notifications" : "Latest updates"}
+                  </div>
+                  {notifications.map((n) => (
+                    <DropdownMenuItem key={n.id} className="whitespace-normal text-sm">
+                      {n.message}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
               
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

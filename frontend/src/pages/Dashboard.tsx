@@ -119,15 +119,15 @@ const Dashboard = () => {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Button variant="outline" className="h-24 flex-col gap-2">
+            <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => navigate('/crops?dialog=add')}>
               <Plus className="h-5 w-5" />
               <span>Add New Crop</span>
             </Button>
-            <Button variant="outline" className="h-24 flex-col gap-2">
+            <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => navigate('/practices?dialog=add')}>
               <FileText className="h-5 w-5" />
               <span>Record Practice</span>
             </Button>
-            <Button variant="outline" className="h-24 flex-col gap-2">
+            <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => navigate('/fields?dialog=soil')}>
               <Upload className="h-5 w-5" />
               <span>Generate Soil Report</span>
             </Button>

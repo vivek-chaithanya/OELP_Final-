@@ -68,6 +68,8 @@ const Crops = () => {
 
   useEffect(() => {
     loadData();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('dialog') === 'add') setOpenCropDialog(true);
   }, []);
 
   const lifecycleStages = [

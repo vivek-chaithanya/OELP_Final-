@@ -114,3 +114,23 @@ def log_user_activity(sender, instance, created, **kwargs):
     except Exception:
         pass
 
+
+@receiver(post_save)
+def replicate_field_image_to_asset(sender, instance, created, **kwargs):
+    try:
+        from .field import Field  # local import to avoid circulars at import time
+    except Exception:
+        return
+    if sender is not Field:
+        return
+    if not getattr(instance, "image", None):
+        return
+    try:
+        Asset = apps.get_model("models_app", "Asset")
+        ct = ContentType.objects.get_for_model(sender)
+        # Avoid duplicates for same object and file name
+        if not Asset.objects.filter(content_type=ct, object_id=instance.pk, file=str(instance.image)).exists():
+            Asset.objects.create(content_type=ct, object_id=instance.pk, file=instance.image)
+    except Exception:
+        pass
+
