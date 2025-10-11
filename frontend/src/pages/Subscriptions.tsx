@@ -75,7 +75,7 @@ const Subscriptions = () => {
   };
 
   const currentPlanName = userPlan?.plan_name || "Free";
-  const billingHistory = useMemo(() => (transactions || []).map((t: any) => ({ id: t.id, date: new Date(t.created_at).toISOString().slice(0,10), plan: t.plan_name || "-", amount: `${t.amount || 0}`, status: t.status || "paid", invoice_pdf: t.invoice_pdf })), [transactions]);
+  const billingHistory = useMemo(() => (transactions || []).map((t: any) => ({ id: t.id, date: new Date(t.created_at).toISOString().slice(0,10), plan: t.plan_name || "-", amount: `${t.amount || 0}`, status: t.status || "paid" })), [transactions]);
 
   return (
     <div className="space-y-6">
@@ -190,7 +190,7 @@ const Subscriptions = () => {
                     <Badge variant="secondary">{invoice.status}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm" onClick={() => { if (invoice.invoice_pdf) window.open(invoice.invoice_pdf, "_blank"); }}>
+                    <Button variant="ghost" size="sm" onClick={() => { window.open(`${API_URL}/transactions/${invoice.id}/invoice/`, "_blank"); }}>
                       <Download className="mr-2 h-4 w-4" />
                       Download
                     </Button>

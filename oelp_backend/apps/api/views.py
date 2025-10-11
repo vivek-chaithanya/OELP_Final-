@@ -33,6 +33,7 @@ from .serializers import (
     FieldIrrigationMethodSerializer,
     FieldIrrigationPracticeSerializer,
     FieldSerializer,
+    CropLifecycleDatesSerializer,
     LoginSerializer,
     NotificationSerializer,
     SignUpSerializer,
@@ -159,24 +160,49 @@ class DashboardView(APIView):
     authentication_classes = [TokenAuthentication]
 
     def get(self, request):
+        from django.utils import timezone
+
         user = request.user
-        active_fields = Field.objects.filter(user=user, is_active=True).count()
-        active_crops = Field.objects.filter(user=user, crop__isnull=False).select_related("crop").count()
+        user_fields = Field.objects.filter(user=user, is_active=True)
+        active_fields = user_fields.count()
+
+        # Count fields with a crop assigned and not yet harvested (no harvesting_date recorded)
+        active_crops = (
+            CropLifecycleDates.objects
+            .filter(field__in=user_fields, field__crop__isnull=False)
+            .filter(harvesting_date__isnull=True)
+            .values("field_id")
+            .distinct()
+            .count()
+        )
+
+        # Total area in hectares summed from JSON field
+        total_hectares = 0.0
+        for f in user_fields:
+            try:
+                hectares = (f.area or {}).get("hectares")
+                if isinstance(hectares, (int, float)):
+                    total_hectares += float(hectares)
+            except Exception:
+                pass
+
         plans = UserPlan.objects.filter(user=user, is_active=True).select_related("plan")
         current_plan = plans.first()
         notifications_count = Notification.objects.filter(receiver=user, is_read=False).count()
-        recent_practices = (
-            FieldIrrigationPracticeSerializer(
-                FieldIrrigationPractice.objects.filter(field__user=user).select_related("field", "irrigation_method").order_by("-performed_at")[:3],
-                many=True,
-            ).data
+        recent_practices_qs = (
+            FieldIrrigationPractice.objects
+            .filter(field__user=user)
+            .select_related("field", "irrigation_method")
+            .order_by("-performed_at")[:3]
         )
+        recent_practices = FieldIrrigationPracticeSerializer(recent_practices_qs, many=True).data
         recent_activity = UserActivity.objects.filter(user=user).order_by("-created_at")[:5]
         return Response(
             {
                 "active_fields": active_fields,
                 "active_crops": active_crops,
                 "current_plan": UserPlanSerializer(current_plan).data if current_plan else None,
+                "total_hectares": round(total_hectares, 4),
                 "unread_notifications": notifications_count,
                 "current_practices": recent_practices,
                 "recent_activity": ActivitySerializer(recent_activity, many=True).data,
@@ -271,12 +297,34 @@ class FieldViewSet(viewsets.ModelViewSet):
         obj, _ = CropLifecycleDates.objects.update_or_create(field=field, defaults=payload)
         return Response(CropLifecycleDatesSerializer(obj).data)
 
+    @action(detail=True, methods=["post"], url_path="set_irrigation_method")
+    def set_irrigation_method(self, request, pk=None):
+        field = self.get_object()
+        method_id = request.data.get("irrigation_method")
+        if not method_id:
+            return Response({"detail": "irrigation_method is required"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            method = IrrigationMethods.objects.get(pk=method_id)
+        except IrrigationMethods.DoesNotExist:
+            return Response({"detail": "Invalid irrigation_method"}, status=status.HTTP_400_BAD_REQUEST)
+        FieldIrrigationMethod.objects.update_or_create(field=field, defaults={"irrigation_method": method})
+        return Response({"detail": "Irrigation method set"})
+
 
 class SoilReportViewSet(viewsets.ModelViewSet):
     authentication_classes = [TokenAuthentication]
     queryset = SoilReport.objects.select_related("field", "soil_type").all()
     serializer_class = SoilReportSerializer
     filterset_fields = ["field", "soil_type"]
+
+    def perform_create(self, serializer):
+        report = serializer.save()
+        # Set a convenient report link to the PDF export filtered by field
+        try:
+            report.report_link = f"/api/reports/export/pdf/?field_id={report.field_id}"
+            report.save(update_fields=["report_link"])
+        except Exception:
+            pass
 
 
 class SoilTextureViewSet(viewsets.ModelViewSet):
@@ -404,6 +452,39 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         return Transaction.objects.filter(user=self.request.user).select_related("plan")
 
+    @action(detail=True, methods=["get"], url_path="invoice")
+    def invoice(self, request, pk=None):
+        # Generate a simple invoice PDF on the fly
+        try:
+            from reportlab.pdfgen import canvas
+        except Exception:
+            return Response({"detail": "reportlab not installed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        txn = self.get_object()
+        import io
+        buffer = io.BytesIO()
+        p = canvas.Canvas(buffer)
+        p.setTitle("Invoice")
+        y = 800
+        p.drawString(100, y, "Invoice")
+        y -= 20
+        p.drawString(100, y, f"Transaction ID: {txn.id}")
+        y -= 20
+        p.drawString(100, y, f"User: {txn.user.username}")
+        y -= 20
+        p.drawString(100, y, f"Plan: {getattr(txn.plan, 'name', '-')}")
+        y -= 20
+        p.drawString(100, y, f"Amount: {txn.amount} {txn.currency}")
+        y -= 20
+        p.drawString(100, y, f"Status: {txn.status}")
+        y -= 40
+        p.drawString(100, y, "Thank you for your purchase.")
+        p.showPage()
+        p.save()
+        buffer.seek(0)
+        response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+        response["Content-Disposition"] = f"attachment; filename=invoice_{txn.id}.pdf"
+        return response
+
 
 class RazorpayCreateOrderView(APIView):
     authentication_classes = [TokenAuthentication]
@@ -438,6 +519,7 @@ class ExportCSVView(APIView):
         # Optional date filters (YYYY-MM-DD)
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
+        field_id = request.query_params.get("field_id") or request.query_params.get("field")
         start_date = None
         end_date = None
         try:
@@ -452,6 +534,8 @@ class ExportCSVView(APIView):
         writer = csv.writer(buffer)
         writer.writerow(["Field", "Crop", "Hectares"])
         queryset = Field.objects.filter(user=request.user)
+        if field_id:
+            queryset = queryset.filter(pk=field_id)
         if start_date:
             queryset = queryset.filter(updated_at__date__gte=start_date)
         if end_date:
@@ -472,6 +556,7 @@ class ExportPDFView(APIView):
         # Minimal PDF export with optional date filter
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
+        field_id = request.query_params.get("field_id") or request.query_params.get("field")
         start_date = None
         end_date = None
         try:
@@ -488,6 +573,8 @@ class ExportPDFView(APIView):
         p.drawString(100, 800, "OELP Report")
         y = 760
         queryset = Field.objects.filter(user=request.user)
+        if field_id:
+            queryset = queryset.filter(pk=field_id)
         if start_date:
             queryset = queryset.filter(updated_at__date__gte=start_date)
         if end_date:

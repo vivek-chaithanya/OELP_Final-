@@ -47,10 +47,10 @@ const Practices = () => {
   }, []);
 
   const stats = [
-    { label: "Total Practices", value: "18" },
-    { label: "Completed", value: "75% complete" },
-    { label: "In Progress", value: "4" },
-    { label: "Overdue", value: "1" },
+    { label: "Total Practices", value: String(practices.length || 0) },
+    { label: "Completed", value: "0% complete" },
+    { label: "In Progress", value: String(practices.length || 0) },
+    { label: "Overdue", value: "0" },
   ];
 
   const rows = useMemo(() => practices.map((p: any) => ({

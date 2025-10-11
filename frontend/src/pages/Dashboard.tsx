@@ -25,13 +25,15 @@ const Dashboard = () => {
         const activeCrops = Number(data.active_crops || 0);
         const fieldsCount = Number(data.active_fields || 0);
         const planLabel = data.current_plan?.plan_name || "Free";
+        const totalHectares = Number(data.total_hectares || 0);
+        const totalAcres = totalHectares * 2.47105;
         setStats([
           { title: "Active Crops", value: String(activeCrops), icon: Sprout, description: "Currently growing", onClick: () => navigate("/crops") },
           { title: "Current Subscription", value: planLabel, icon: CreditCard, description: "—", onClick: () => navigate("/subscriptions") },
-          { title: "Total Fields", value: `${0} acres`, icon: Map, description: `${fieldsCount} fields`, onClick: () => navigate("/fields") },
+          { title: "Total Fields", value: `${totalAcres.toFixed(2)} acres`, icon: Map, description: `${fieldsCount} fields`, onClick: () => navigate("/fields") },
         ]);
-        setPractices(data.current_practices || []);
-        setRecentActivity((data.recent_activity || []).map((a: any) => ({ action: a.file, time: new Date(a.uploaded_at).toLocaleString() })));
+        setPractices(Array.isArray(data.current_practices) ? data.current_practices : []);
+        setRecentActivity((data.recent_activity || []).map((a: any) => ({ action: a.action, time: new Date(a.created_at).toLocaleString() })));
       })
       .catch(() => {});
   }, []);
@@ -73,15 +75,14 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {practices.map((practice, index) => (
+              {practices.map((practice: any, index) => (
                 <div key={index} className="flex items-start justify-between border-b pb-3 last:border-0">
                   <div className="space-y-1">
-                    <p className="font-medium">{practice.name}</p>
-                    <p className="text-sm text-muted-foreground">{practice.field}</p>
+                    <p className="font-medium text-foreground">{practice.method_name || "Irrigation"}</p>
+                    <p className="text-sm text-muted-foreground">{practice.field_name}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium text-primary">{practice.status}</p>
-                    <p className="text-xs text-muted-foreground">{practice.time}</p>
+                    <p className="text-sm font-medium text-primary">{practice.performed_at ? new Date(practice.performed_at).toLocaleString() : ""}</p>
                   </div>
                 </div>
               ))}
@@ -96,7 +97,7 @@ const Dashboard = () => {
                 <CardTitle>Recent Activity</CardTitle>
                 <CardDescription>Latest updates</CardDescription>
               </div>
-              <Button variant="ghost" size="sm">View All</Button>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/practices')}>View All</Button>
             </div>
           </CardHeader>
           <CardContent>
