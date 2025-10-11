@@ -36,6 +36,7 @@ const Fields = () => {
     soil_type: "",
     is_active: true,
   });
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [irrigationMethods, setIrrigationMethods] = useState<any[]>([]);
   const [soilTextures, setSoilTextures] = useState<any[]>([]);
   const [irrigationForm, setIrrigationForm] = useState({ field: "", irrigation_method: "", notes: "" });
@@ -265,23 +266,42 @@ const Fields = () => {
               <Label>Location Name</Label>
               <Input value={formField.location_name} onChange={(e) => setFormField({ ...formField, location_name: e.target.value })} />
             </div>
+            <div className="space-y-2">
+              <Label>Image</Label>
+              <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
+            </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setOpenFieldDialog(false)}>Cancel</Button>
               <Button onClick={async () => {
-                const payload: any = {
-                  name: formField.name,
-                  farm: formField.farm ? Number(formField.farm) : undefined,
-                  crop: formField.crop ? Number(formField.crop) : null,
-                  crop_variety: formField.crop_variety ? Number(formField.crop_variety) : null,
-                  device: formField.device ? Number(formField.device) : null,
-                  location_name: formField.location_name || null,
-                  soil_type: formField.soil_type ? Number(formField.soil_type) : null,
-                  is_active: !!formField.is_active,
-                };
                 const isEdit = !!editingField;
                 const url = isEdit ? `${API_URL}/fields/${editingField.id}/` : `${API_URL}/fields/`;
                 const method = isEdit ? "PUT" : "POST";
-                const res = await fetch(url, { method, headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify(payload) });
+                let res: Response;
+                if (imageFile) {
+                  const fd = new FormData();
+                  fd.append("name", formField.name);
+                  if (formField.farm) fd.append("farm", String(Number(formField.farm)));
+                  if (formField.crop) fd.append("crop", String(Number(formField.crop)));
+                  if (formField.crop_variety) fd.append("crop_variety", String(Number(formField.crop_variety)));
+                  if (formField.device) fd.append("device", String(Number(formField.device)));
+                  if (formField.location_name) fd.append("location_name", formField.location_name);
+                  if (formField.soil_type) fd.append("soil_type", String(Number(formField.soil_type)));
+                  fd.append("is_active", String(!!formField.is_active));
+                  fd.append("image", imageFile);
+                  res = await fetch(url, { method, headers: { ...authHeaders() }, body: fd });
+                } else {
+                  const payload: any = {
+                    name: formField.name,
+                    farm: formField.farm ? Number(formField.farm) : undefined,
+                    crop: formField.crop ? Number(formField.crop) : null,
+                    crop_variety: formField.crop_variety ? Number(formField.crop_variety) : null,
+                    device: formField.device ? Number(formField.device) : null,
+                    location_name: formField.location_name || null,
+                    soil_type: formField.soil_type ? Number(formField.soil_type) : null,
+                    is_active: !!formField.is_active,
+                  };
+                  res = await fetch(url, { method, headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify(payload) });
+                }
                 if (res.ok) { toast.success(isEdit ? "Field updated" : "Field created"); setOpenFieldDialog(false); loadData(); } else { const err = await res.json().catch(() => ({})); toast.error(err.detail || "Failed to save field"); }
               }}>{editingField ? "Update" : "Create"}</Button>
             </div>
