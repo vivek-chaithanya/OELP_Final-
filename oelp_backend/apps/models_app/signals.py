@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from django.apps import apps
-from django.db.models.signals import post_migrate
+from django.db.models.signals import post_migrate, post_save
 from django.dispatch import receiver
 from django.db import connection
+from django.contrib.contenttypes.models import ContentType
 
 
 @receiver(post_migrate)
@@ -86,4 +87,30 @@ def seed_core_data(sender, **kwargs):
             feats = list(Feature.objects.all()[:2])
             for f in feats:
                 PlanFeature.objects.get_or_create(plan=plan, feature=f, defaults={"max_count": 1000, "duration_days": duration})
+
+
+# Basic activity logging for Field and SoilReport changes
+@receiver(post_save)
+def log_user_activity(sender, instance, created, **kwargs):
+    try:
+        models_module = sender.__module__
+    except Exception:
+        return
+    if not models_module.startswith("apps.models_app"):
+        return
+    # Only track selected models for now
+    track_models = {"Field", "SoilReport", "Crop", "CropVariety"}
+    model_name = sender.__name__
+    if model_name not in track_models:
+        return
+    user = getattr(instance, "user", None) or getattr(getattr(instance, "farm", None), "user", None)
+    if not user:
+        return
+    try:
+        Activity = apps.get_model("models_app", "UserActivity")
+        ct = ContentType.objects.get_for_model(sender)
+        action = "create" if created else "update"
+        Activity.objects.create(user=user, action=action, content_type=ct, object_id=instance.pk, description=f"{model_name} {action}")
+    except Exception:
+        pass
 

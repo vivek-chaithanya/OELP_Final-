@@ -15,6 +15,7 @@ from apps.models_app.plan import Plan
 from apps.models_app.soil_report import SoilTexture, SoilReport
 from apps.models_app.token import UserAuthToken
 from apps.models_app.user import CustomUser
+from apps.models_app.models import UserActivity
 from apps.models_app.user_plan import (
     UserPlan,
     PlanFeatureUsage,
@@ -209,6 +210,12 @@ class AssetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Asset
         fields = ("id", "file", "content_type", "object_id", "uploaded_at")
+
+
+class ActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserActivity
+        fields = ("id", "action", "description", "created_at", "object_id")
 
 
 class PaymentMethodSerializer(serializers.ModelSerializer):

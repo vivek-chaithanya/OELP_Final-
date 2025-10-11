@@ -14,6 +14,7 @@ from .plan import Plan
 from .soil_report import SoilTexture, SoilReport
 from .token import UserAuthToken
 from .user import CustomUser, Role, UserRole
+from .models import UserActivity
 from .user_plan import (
     UserPlan,
     PlanFeatureUsage,
@@ -42,6 +43,7 @@ class UserAuthTokenAdmin(admin.ModelAdmin):
 
 admin.site.register(Role)
 admin.site.register(UserRole)
+admin.site.register(UserActivity)
 
 
 @admin.register(Asset)

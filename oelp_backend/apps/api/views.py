@@ -23,6 +23,7 @@ from .auth import TokenAuthentication
 from .permissions import IsOwnerOrReadOnly
 from .serializers import (
     AssetSerializer,
+    ActivitySerializer,
     CropSerializer,
     CropVarietySerializer,
     DeviceSerializer,
@@ -55,6 +56,7 @@ from apps.models_app.plan import Plan
 from apps.models_app.user_plan import UserPlan, PaymentMethod, Transaction
 from apps.models_app.notifications import Notification, SupportRequest
 from apps.models_app.irrigation import IrrigationMethods
+from apps.models_app.models import UserActivity
 from apps.models_app.soil_report import SoilReport, SoilTexture
 
 
@@ -169,7 +171,7 @@ class DashboardView(APIView):
                 many=True,
             ).data
         )
-        recent_activity = Asset.objects.filter().order_by("-uploaded_at")[:5]
+        recent_activity = UserActivity.objects.filter(user=user).order_by("-created_at")[:5]
         return Response(
             {
                 "active_fields": active_fields,
@@ -177,7 +179,7 @@ class DashboardView(APIView):
                 "current_plan": UserPlanSerializer(current_plan).data if current_plan else None,
                 "unread_notifications": notifications_count,
                 "current_practices": recent_practices,
-                "recent_activity": AssetSerializer(recent_activity, many=True).data,
+                "recent_activity": ActivitySerializer(recent_activity, many=True).data,
             }
         )
 
