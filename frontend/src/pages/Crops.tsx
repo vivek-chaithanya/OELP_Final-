@@ -27,6 +27,8 @@ const Crops = () => {
   const [varieties, setVarieties] = useState<{ id: number; crop: number; name: string; is_primary: boolean }[]>([]);
   const [openCropDialog, setOpenCropDialog] = useState(false);
   const [editingCrop, setEditingCrop] = useState<{ id: number; name: string; icon_url?: string | null } | null>(null);
+  const [cropDetailsDialog, setCropDetailsDialog] = useState(false);
+  const [selectedCrop, setSelectedCrop] = useState<any>(null);
   const [formCrop, setFormCrop] = useState({ 
     name: "", 
     icon_url: "", 
@@ -294,33 +296,68 @@ const Crops = () => {
                 <TableHead>Planted Date</TableHead>
                 <TableHead>Sowing Date</TableHead>
                 <TableHead>Harvesting Date</TableHead>
+                <TableHead>Features</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCrops.map((crop) => (
-                <TableRow key={crop.id}>
-                  <TableCell className="font-medium">{crop.name}</TableCell>
-                  <TableCell>{crop.variety || varieties.find((v) => v.crop === crop.id && v.is_primary)?.name || "-"}</TableCell>
-                  <TableCell>{crop.season || "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusColor(crop.status)}>{crop.status || "—"}</Badge>
-                  </TableCell>
-                  <TableCell>{crop.planted_date || "—"}</TableCell>
-                  <TableCell>{crop.sowing_date || "—"}</TableCell>
-                  <TableCell>{crop.harvesting_date || "—"}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => handleOpenEditCrop(crop)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDeleteCrop(crop.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filteredCrops.map((crop) => {
+                const cropFeatures = [
+                  crop.variety && `Variety: ${crop.variety}`,
+                  crop.season && `Season: ${crop.season}`,
+                  crop.status && `Status: ${crop.status}`,
+                  crop.planted_date && `Planted: ${new Date(crop.planted_date).toLocaleDateString()}`,
+                  crop.sowing_date && `Sowing: ${new Date(crop.sowing_date).toLocaleDateString()}`,
+                  crop.harvesting_date && `Harvest: ${new Date(crop.harvesting_date).toLocaleDateString()}`
+                ].filter(Boolean);
+                
+                const displayFeatures = cropFeatures.slice(0, 3);
+                const hasMoreFeatures = cropFeatures.length > 3;
+                
+                return (
+                  <TableRow 
+                    key={crop.id} 
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => {
+                      // Show detailed crop information in a dialog
+                      setSelectedCrop(crop);
+                      setCropDetailsDialog(true);
+                    }}
+                  >
+                    <TableCell className="font-medium">{crop.name}</TableCell>
+                    <TableCell>{crop.variety || varieties.find((v) => v.crop === crop.id && v.is_primary)?.name || "-"}</TableCell>
+                    <TableCell>{crop.season || "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant={getStatusColor(crop.status)}>{crop.status || "—"}</Badge>
+                    </TableCell>
+                    <TableCell>{crop.planted_date || "—"}</TableCell>
+                    <TableCell>{crop.sowing_date || "—"}</TableCell>
+                    <TableCell>{crop.harvesting_date || "—"}</TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        {displayFeatures.map((feature, idx) => (
+                          <div key={idx} className="text-xs text-muted-foreground">{feature}</div>
+                        ))}
+                        {hasMoreFeatures && (
+                          <div className="text-xs text-primary font-medium">
+                            +{cropFeatures.length - 3} more features
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => handleOpenEditCrop(crop)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteCrop(crop.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
@@ -421,6 +458,70 @@ const Crops = () => {
       </Dialog>
 
 
+      {/* Crop Details Dialog */}
+      <Dialog open={cropDetailsDialog} onOpenChange={setCropDetailsDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Crop Details</DialogTitle>
+          </DialogHeader>
+          {selectedCrop && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                {selectedCrop.icon_url && (
+                  <img src={selectedCrop.icon_url} alt={selectedCrop.name} className="w-16 h-16 rounded-lg object-cover" />
+                )}
+                <div>
+                  <h3 className="text-2xl font-bold">{selectedCrop.name}</h3>
+                  <p className="text-muted-foreground">Complete crop information</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Variety</Label>
+                  <p className="text-sm">{selectedCrop.variety || "Not specified"}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Season</Label>
+                  <p className="text-sm">{selectedCrop.season || "Not specified"}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Status</Label>
+                  <Badge variant={getStatusColor(selectedCrop.status)}>{selectedCrop.status || "Not specified"}</Badge>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Planted Date</Label>
+                  <p className="text-sm">{selectedCrop.planted_date ? new Date(selectedCrop.planted_date).toLocaleDateString() : "Not specified"}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Sowing Date</Label>
+                  <p className="text-sm">{selectedCrop.sowing_date ? new Date(selectedCrop.sowing_date).toLocaleDateString() : "Not specified"}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Harvesting Date</Label>
+                  <p className="text-sm">{selectedCrop.harvesting_date ? new Date(selectedCrop.harvesting_date).toLocaleDateString() : "Not specified"}</p>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">All Features</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    selectedCrop.variety && `Variety: ${selectedCrop.variety}`,
+                    selectedCrop.season && `Season: ${selectedCrop.season}`,
+                    selectedCrop.status && `Status: ${selectedCrop.status}`,
+                    selectedCrop.planted_date && `Planted: ${new Date(selectedCrop.planted_date).toLocaleDateString()}`,
+                    selectedCrop.sowing_date && `Sowing: ${new Date(selectedCrop.sowing_date).toLocaleDateString()}`,
+                    selectedCrop.harvesting_date && `Harvest: ${new Date(selectedCrop.harvesting_date).toLocaleDateString()}`
+                  ].filter(Boolean).map((feature, idx) => (
+                    <div key={idx} className="p-2 bg-muted rounded-md text-sm">{feature}</div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

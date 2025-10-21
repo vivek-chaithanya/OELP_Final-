@@ -29,6 +29,8 @@ const Fields = () => {
   const [openSoilAnalysisDialog, setOpenSoilAnalysisDialog] = useState(false);
   const [openScheduleDialog, setOpenScheduleDialog] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({ field: "", time: "", notes: "" });
+  const [fieldDetailsDialog, setFieldDetailsDialog] = useState(false);
+  const [selectedField, setSelectedField] = useState<any>(null);
   const [editingField, setEditingField] = useState<any | null>(null);
   const [formField, setFormField] = useState({
     name: "",
@@ -164,32 +166,69 @@ const Fields = () => {
                 <TableHead>Irrigation</TableHead>
                 <TableHead>Crop Being Grown</TableHead>
                 <TableHead>Farm Location</TableHead>
+                <TableHead>Features</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredFields.map((field) => (
-                <TableRow key={field.id}>
-                  <TableCell className="font-medium">{field.name}</TableCell>
-                  <TableCell>{field.size_acres ? `${field.size_acres} acres` : (field.area?.hectares ? `${field.area.hectares} ha` : "-")}</TableCell>
-                  <TableCell>{field.soil_type_name || "-"}</TableCell>
-                  <TableCell>{field.irrigation_method_name || field.irrigation || "-"}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{field.crop_name || "-"}</Badge>
-                  </TableCell>
-                  <TableCell>{field.farm_name || field.location_name || "-"}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => { setEditingField(field); setFormField({ name: field.name || "", farm: String(field.farm || ""), crop: String(field.crop || ""), crop_variety: String(field.crop_variety || ""), device: String(field.device || ""), location_name: field.location_name || "", soil_type: String(field.soil_type || ""), is_active: !!field.is_active, size_acres: field.size_acres || "", irrigation_method: String(field.irrigation_method || "") }); setImageFile(null); setOpenFieldDialog(true); }}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={async () => { if (!confirm("Delete this field?")) return; const res = await fetch(`${API_URL}/fields/${field.id}/`, { method: "DELETE", headers: authHeaders() }); if (res.ok) { toast.success("Field deleted"); loadData(); } else { toast.error("Failed to delete field"); } }}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filteredFields.map((field) => {
+                const fieldFeatures = [
+                  field.size_acres && `Size: ${field.size_acres} acres`,
+                  field.area?.hectares && `Size: ${field.area.hectares} ha`,
+                  field.soil_type_name && `Soil: ${field.soil_type_name}`,
+                  field.irrigation_method_name && `Irrigation: ${field.irrigation_method_name}`,
+                  field.crop_name && `Crop: ${field.crop_name}`,
+                  field.farm_name && `Farm: ${field.farm_name}`,
+                  field.location_name && `Location: ${field.location_name}`,
+                  field.is_active !== undefined && `Status: ${field.is_active ? 'Active' : 'Inactive'}`
+                ].filter(Boolean);
+                
+                const displayFeatures = fieldFeatures.slice(0, 3);
+                const hasMoreFeatures = fieldFeatures.length > 3;
+                
+                return (
+                  <TableRow 
+                    key={field.id} 
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => {
+                      // Show detailed field information in a dialog
+                      setSelectedField(field);
+                      setFieldDetailsDialog(true);
+                    }}
+                  >
+                    <TableCell className="font-medium">{field.name}</TableCell>
+                    <TableCell>{field.size_acres ? `${field.size_acres} acres` : (field.area?.hectares ? `${field.area.hectares} ha` : "-")}</TableCell>
+                    <TableCell>{field.soil_type_name || "-"}</TableCell>
+                    <TableCell>{field.irrigation_method_name || field.irrigation || "-"}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{field.crop_name || "-"}</Badge>
+                    </TableCell>
+                    <TableCell>{field.farm_name || field.location_name || "-"}</TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        {displayFeatures.map((feature, idx) => (
+                          <div key={idx} className="text-xs text-muted-foreground">{feature}</div>
+                        ))}
+                        {hasMoreFeatures && (
+                          <div className="text-xs text-primary font-medium">
+                            +{fieldFeatures.length - 3} more features
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => { setEditingField(field); setFormField({ name: field.name || "", farm: String(field.farm || ""), crop: String(field.crop || ""), crop_variety: String(field.crop_variety || ""), device: String(field.device || ""), location_name: field.location_name || "", soil_type: String(field.soil_type || ""), is_active: !!field.is_active, size_acres: field.size_acres || "", irrigation_method: String(field.irrigation_method || "") }); setImageFile(null); setOpenFieldDialog(true); }}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={async () => { if (!confirm("Delete this field?")) return; const res = await fetch(`${API_URL}/fields/${field.id}/`, { method: "DELETE", headers: authHeaders() }); if (res.ok) { toast.success("Field deleted"); loadData(); } else { toast.error("Failed to delete field"); } }}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
@@ -620,6 +659,77 @@ function SoilAnalysisDialog({ open, onOpenChange, API_URL, fields, authHeaders }
             </TableBody>
           </Table>
         </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* Field Details Dialog */}
+    <Dialog open={fieldDetailsDialog} onOpenChange={setFieldDetailsDialog}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Field Details</DialogTitle>
+        </DialogHeader>
+        {selectedField && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-2xl font-bold">{selectedField.name}</h3>
+              <p className="text-muted-foreground">Complete field information</p>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Field Size</Label>
+                <p className="text-sm">
+                  {selectedField.size_acres 
+                    ? `${selectedField.size_acres} acres` 
+                    : selectedField.area?.hectares 
+                      ? `${selectedField.area.hectares} hectares` 
+                      : "Not specified"
+                  }
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Soil Type</Label>
+                <p className="text-sm">{selectedField.soil_type_name || "Not specified"}</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Irrigation Method</Label>
+                <p className="text-sm">{selectedField.irrigation_method_name || selectedField.irrigation || "Not specified"}</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Crop Being Grown</Label>
+                <Badge variant="secondary">{selectedField.crop_name || "No crop"}</Badge>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Farm Location</Label>
+                <p className="text-sm">{selectedField.farm_name || selectedField.location_name || "Not specified"}</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Status</Label>
+                <Badge variant={selectedField.is_active ? "default" : "secondary"}>
+                  {selectedField.is_active ? "Active" : "Inactive"}
+                </Badge>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">All Features</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  selectedField.size_acres && `Size: ${selectedField.size_acres} acres`,
+                  selectedField.area?.hectares && `Size: ${selectedField.area.hectares} ha`,
+                  selectedField.soil_type_name && `Soil: ${selectedField.soil_type_name}`,
+                  selectedField.irrigation_method_name && `Irrigation: ${selectedField.irrigation_method_name}`,
+                  selectedField.crop_name && `Crop: ${selectedField.crop_name}`,
+                  selectedField.farm_name && `Farm: ${selectedField.farm_name}`,
+                  selectedField.location_name && `Location: ${selectedField.location_name}`,
+                  selectedField.is_active !== undefined && `Status: ${selectedField.is_active ? 'Active' : 'Inactive'}`
+                ].filter(Boolean).map((feature, idx) => (
+                  <div key={idx} className="p-2 bg-muted rounded-md text-sm">{feature}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
