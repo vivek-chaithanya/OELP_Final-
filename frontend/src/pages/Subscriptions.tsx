@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import usePlatformData from "@/lib/usePlatformData";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check, CreditCard, Download, Plus } from "lucide-react";
@@ -26,6 +27,7 @@ const Subscriptions = () => {
   const [userPlan, setUserPlan] = useState<any | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const { adminAnalytics, transactions: hookTx = [], plans: hookPlans = [], recentSubscriptions, loading } = usePlatformData();
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showPlanDialog, setShowPlanDialog] = useState<{ open: boolean; plan: any | null }>({ open: false, plan: null });
   const [card, setCard] = useState({ brand: "Visa", last4: "", exp_month: "", exp_year: "" });
@@ -46,18 +48,34 @@ const Subscriptions = () => {
         fetch(`${API_URL}/payment-methods/`, { headers: authHeaders() }),
         fetch(`${API_URL}/transactions/`, { headers: authHeaders() }),
       ]);
-      const j = async (r: Response) => (Array.isArray(await r.clone().json().catch(() => [])) ? await r.json() : (await r.json()).results);
-      setPlans(await j(plansRes));
+      const j = async (r: Response) => {
+        try {
+          const parsed = await r.clone().json();
+          return Array.isArray(parsed) ? parsed : parsed.results || [];
+        } catch {
+          return [];
+        }
+      };
+  const parsedPlans = await j(plansRes);
+  setPlans((Array.isArray(hookPlans) && hookPlans.length > 0) ? hookPlans : parsedPlans);
       const ups = await j(upRes);
-      setUserPlan(Array.isArray(ups) ? ups[0] || null : ups);
-      setPaymentMethods(await j(pmRes));
-      setTransactions(await j(txRes));
+      setUserPlan(Array.isArray(ups) ? ups[0] || null : ups || null);
+  setPaymentMethods(await j(pmRes));
+  const parsedTx = await j(txRes);
+  setTransactions((Array.isArray(hookTx) && hookTx.length > 0) ? hookTx : parsedTx);
     } catch (e: any) {
-      toast.error(e.message || "Failed to load subscriptions data");
+      toast.error(e?.message || "Failed to load subscriptions data");
     }
   };
 
   useEffect(() => { load(); }, []);
+
+  // If hook provides an explicit current user subscription, prefer it for UI
+  useEffect(() => {
+    if (Array.isArray(recentSubscriptions) && recentSubscriptions.length > 0 && !userPlan) {
+      setUserPlan(recentSubscriptions[0]);
+    }
+  }, [recentSubscriptions]);
 
   const selectPlan = async (planId: number) => {
     try {
@@ -95,13 +113,13 @@ const Subscriptions = () => {
       }
     } catch {}
   };
-  
+
   const handleDowngradeClick = async () => {
     if (!userPlan) return;
     await loadRefundInfo();
     setShowDowngradeDialog(true);
   };
-  
+
   const handleDowngrade = async (requestRefund: boolean) => {
     if (!userPlan) return;
     try {
@@ -116,6 +134,8 @@ const Subscriptions = () => {
       if (res.ok) {
         if (data.refund_processed && data.refund_amount) {
           toast.success(`Downgraded to Free. Refund of ₹${data.refund_amount} processed.`);
+          // Notify other pages to refresh platform data (analytics, transactions)
+          try { window.dispatchEvent(new Event('platform-data-refresh')); } catch (e) {}
         } else {
           toast.success('Downgraded to Free');
         }
@@ -156,11 +176,12 @@ const Subscriptions = () => {
           <div className="flex justify-between items-start">
             <div>
               <CardTitle>Current Subscription: {currentPlanName}</CardTitle>
-              <CardDescription>{currentPlanName === "Free" ? "No renewal required" : "Active"}</CardDescription>
+              <CardDescription>{currentPlanName === "Free" ? "No renewal required" : (userPlan?.is_active ? "Active" : "Inactive")}</CardDescription>
             </div>
             <div className="text-right">
-              <p className="text-3xl font-bold text-primary">{userPlan?.plan_details?.price || userPlan?.plan?.price ? `₹${userPlan.plan_details?.price || userPlan.plan?.price}` : "₹0.00"}<span className="text-sm text-muted-foreground">/period</span></p>
-              <p className="text-sm text-muted-foreground">{userPlan?.end_date ? `Ends ${userPlan.end_date}` : "—"}</p>
+              <p className="text-3xl font-bold text-primary">{(userPlan?.plan_details?.price || userPlan?.plan?.price) ? `₹${Number(userPlan.plan_details?.price || userPlan.plan?.price).toLocaleString()}` : "₹0.00"}<span className="text-sm text-muted-foreground">/period</span></p>
+              {/* Show end date only for paid plans */}
+              <p className="text-sm text-muted-foreground">{(currentPlanName && currentPlanName.toLowerCase() !== 'free' && userPlan?.end_date) ? `Ends ${userPlan.end_date}` : "—"}</p>
             </div>
           </div>
         </CardHeader>
@@ -184,7 +205,7 @@ const Subscriptions = () => {
                   <CardTitle>{plan.name}</CardTitle>
                   {plan.type === "main" && <Badge>Popular</Badge>}
                 </div>
-                <p className="text-3xl font-bold text-primary">₹{plan.price}<span className="text-sm text-muted-foreground">/{plan.duration}d</span></p>
+                <p className="text-3xl font-bold text-primary">₹{Number(plan.price).toLocaleString()}<span className="text-sm text-muted-foreground">/{plan.duration}d</span></p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
@@ -213,16 +234,8 @@ const Subscriptions = () => {
 
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle>Payment Methods</CardTitle>
-              <CardDescription>Manage your payment options</CardDescription>
-            </div>
-            <Button variant="outline" onClick={() => setShowPaymentDialog(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Payment Method
-            </Button>
-          </div>
+          <CardTitle>Payment Methods</CardTitle>
+          <CardDescription>Manage your payment options</CardDescription>
         </CardHeader>
         <CardContent>
           {paymentMethods.length === 0 && <p className="text-sm text-muted-foreground">No payment methods added.</p>}
@@ -278,7 +291,7 @@ const Subscriptions = () => {
                     <Badge variant="secondary">{invoice.status}</Badge>
                   </TableCell>
                   <TableCell>
-                  <Button variant="ghost" size="sm" onClick={() => { const token = localStorage.getItem('token'); const url = `${API_URL}/transactions/${invoice.id}/invoice/${token ? `?token=${token}` : ''}`; window.open(url, "_blank"); }}>
+                    <Button variant="ghost" size="sm" onClick={() => { const token = localStorage.getItem('token'); const url = `${API_URL}/transactions/${invoice.id}/invoice/${token ? `?token=${token}` : ''}`; window.open(url, "_blank"); }}>
                       <Download className="mr-2 h-4 w-4" />
                       Download
                     </Button>
@@ -289,6 +302,8 @@ const Subscriptions = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* dialogs below unchanged (payment, plan, pm picker, details, downgrade) */}
 
       <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
         <DialogContent>
@@ -333,7 +348,7 @@ const Subscriptions = () => {
                 <div key={p.id} className="flex items-center justify-between p-3 border rounded">
                   <div>
                     <p className="font-medium">{p.name}</p>
-                    <p className="text-xs text-muted-foreground">₹{p.price} / {p.duration}d</p>
+                    <p className="text-xs text-muted-foreground">₹{Number(p.price).toLocaleString()} / {p.duration}d</p>
                   </div>
                   <Button size="sm" onClick={() => setShowPlanDialog({ open: true, plan: p })}>View</Button>
                 </div>
@@ -345,7 +360,7 @@ const Subscriptions = () => {
               <div>
                 <p className="text-sm font-medium">Details</p>
                 <p className="text-sm text-muted-foreground">Duration: {showPlanDialog.plan.duration} days</p>
-                <p className="text-sm text-muted-foreground">Cost: ₹{showPlanDialog.plan.price}</p>
+                <p className="text-sm text-muted-foreground">Cost: ₹{Number(showPlanDialog.plan.price).toLocaleString()}</p>
               </div>
               <div>
                 <p className="text-sm font-medium">Features</p>
@@ -361,11 +376,9 @@ const Subscriptions = () => {
                   <Button onClick={async () => {
                     try {
                       setLoadingPlan(showPlanDialog.plan.id);
-                      // Prefer saved card (fake charge); if none, fallback to Razorpay
                       if (paymentMethods.length > 0) {
                         setShowPmPicker(true);
                       } else {
-                        // Fallback to Razorpay flow
                         const orderRes = await fetch(`${API_URL}/subscriptions/razorpay/order/`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -443,7 +456,6 @@ const Subscriptions = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Payment Method Picker (choose saved card) */}
       <Dialog open={showPmPicker} onOpenChange={(open) => { setShowPmPicker(open); if (!open) setLoadingPlan(null); }}>
         <DialogContent>
           <DialogHeader>
@@ -458,7 +470,6 @@ const Subscriptions = () => {
                 </div>
                 <Button size="sm" onClick={async () => {
                   try {
-                    // Create Razorpay order
                     const orderRes = await fetch(`${API_URL}/subscriptions/razorpay/order/`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -541,7 +552,6 @@ const Subscriptions = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Payment Method Details Dialog */}
       <Dialog open={showPmDetails.open} onOpenChange={(open) => setShowPmDetails({ open, pm: open ? showPmDetails.pm : null })}>
         <DialogContent>
           <DialogHeader>
@@ -561,7 +571,6 @@ const Subscriptions = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Downgrade Dialog with FAQ and Refund */}
       <Dialog open={showDowngradeDialog} onOpenChange={(open) => { setShowDowngradeDialog(open); if (!open) { setSelectedWhy(""); setCustomReason(""); } }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -606,11 +615,11 @@ const Subscriptions = () => {
               <div className="p-4 border rounded-lg bg-muted/50">
                 <h4 className="font-semibold mb-2">Refund Information</h4>
                 <div className="space-y-1 text-sm">
-                  <p>Original Payment: ₹{refundInfo.payment_info?.amount || 0}</p>
+                  <p>Original Payment: ₹{Number(refundInfo.payment_info?.amount || 0).toLocaleString()}</p>
                   <p>Days Since Purchase: {refundInfo.payment_info?.days_since || 0}</p>
-                  <p>Refund Policy: {refundInfo.refund_policy?.percentage || 0}% refund within {refundInfo.refund_policy?.days_after_purchase || 0} days</p>
+                  <p>Refund Policy: {refundInfo.refund_policy ? `${refundInfo.refund_policy.percentage}% within ${refundInfo.refund_policy.days_after_purchase} days` : 'No policy configured (full refund possible)'} </p>
                   {refundInfo.refund_available ? (
-                    <p className="text-green-600 font-semibold">Refund Amount: ₹{refundInfo.refund_amount || 0}</p>
+                    <p className="text-green-600 font-semibold">Refund Amount: ₹{Number(refundInfo.refund_amount || 0).toLocaleString()}</p>
                   ) : (
                     <p className="text-muted-foreground">{refundInfo.reason}</p>
                   )}
@@ -647,3 +656,4 @@ const Subscriptions = () => {
 };
 
 export default Subscriptions;
+

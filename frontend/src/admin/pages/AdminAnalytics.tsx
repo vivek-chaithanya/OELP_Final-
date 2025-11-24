@@ -1,5 +1,6 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { useEffect, useMemo, useState } from "react";
+import usePlatformData from "@/lib/usePlatformData";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, LineChart, Line, CartesianGrid } from "recharts";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ export default function AdminAnalytics() {
   const [summary, setSummary] = useState<any | null>(null);
   const [fields, setFields] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const { adminAnalytics, transactions: hookTx = [], plans: hookPlans = [], loading } = usePlatformData();
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: "", end: "" });
   const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
 
@@ -17,17 +19,28 @@ export default function AdminAnalytics() {
     const token = localStorage.getItem('token');
     (async () => {
       try {
-        const [adminRes, fieldsRes, transactionsRes] = await Promise.all([
-          fetch(`${API_URL}/admin/analytics/`, { headers: { Authorization: `Token ${token}` } }),
-          fetch(`${API_URL}/admin/fields/`, { headers: { Authorization: `Token ${token}` } }),
-          fetch(`${API_URL}/transactions/`, { headers: { Authorization: `Token ${token}` } }),
-        ]);
-        const adminData = adminRes.ok ? await adminRes.json() : null;
-        const fieldsJson = fieldsRes.ok ? await fieldsRes.json() : { results: [] };
-        const txJson = transactionsRes.ok ? await transactionsRes.json() : { results: [] };
-        setSummary(adminData?.stats || null);
+        // Prefer hook-provided adminAnalytics/transactions when available
+        if (adminAnalytics) {
+          setSummary(adminAnalytics.stats || null);
+        } else {
+          const adminRes = await fetch(`${API_URL}/admin/analytics/`, { headers: { Authorization: `Token ${token}` } }).catch(() => null);
+          const adminData = adminRes && adminRes.ok ? await adminRes.json() : null;
+          setSummary(adminData?.stats || null);
+        }
+
+        // For fields and transactions, prefer hook data if it contains values
+        if (hookTx && hookTx.length > 0) {
+          setTransactions(hookTx);
+        } else {
+          const txRes = await fetch(`${API_URL}/transactions/`, { headers: { Authorization: `Token ${token}` } }).catch(() => null);
+          const txJson = txRes && txRes.ok ? await txRes.json() : { results: [] };
+          setTransactions(Array.isArray(txJson?.results) ? txJson.results : txJson || []);
+        }
+
+        // Fields remain fetched from admin endpoint (no hook currently provides fields)
+        const fieldsRes = await fetch(`${API_URL}/admin/fields/`, { headers: { Authorization: `Token ${token}` } }).catch(() => null);
+        const fieldsJson = fieldsRes && fieldsRes.ok ? await fieldsRes.json() : { results: [] };
         setFields(Array.isArray(fieldsJson?.results) ? fieldsJson.results : fieldsJson || []);
-        setTransactions(Array.isArray(txJson?.results) ? txJson.results : txJson || []);
       } catch {}
     })();
   }, []);

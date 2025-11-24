@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import usePlatformData from "@/lib/usePlatformData";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
@@ -7,20 +8,11 @@ import { Search } from "lucide-react";
 const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
 
 export default function BusinessPayments() {
-  const [txns, setTxns] = useState<any[]>([]);
+  const { transactions: txns = [], loading } = usePlatformData();
   const [query, setQuery] = useState("");
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    fetch(`${API_URL}/transactions/`, { headers: { Authorization: `Token ${token}` } })
-      .then(r=>r.ok?r.json():null)
-      .then(d=> setTxns(Array.isArray(d?.results) ? d.results : (Array.isArray(d) ? d : [])))
-      .catch(()=> setTxns([]));
-  }, []);
-
   const visible = useMemo(() => {
-    let arr = txns;
+  let arr = txns || [];
     if (query.trim()) {
       const q = query.toLowerCase();
       arr = arr.filter((t:any)=>

@@ -50,6 +50,7 @@ urlpatterns = [
     path("reports/export/pdf/", views.ExportPDFView.as_view(), name="export-pdf"),
     path("analytics/summary/", views.AnalyticsSummaryView.as_view(), name="analytics-summary"),
     path("admin/analytics/", views.AdminAnalyticsView.as_view(), name="admin-analytics"),
+    path("admin/transactions/refunds-summary/", views.RefundsSummaryView.as_view(), name="refunds-summary"),
     path("auth/ensure-role/", views.EnsureRoleView.as_view(), name="ensure-role"),
     path("", include(router.urls)),
 ]

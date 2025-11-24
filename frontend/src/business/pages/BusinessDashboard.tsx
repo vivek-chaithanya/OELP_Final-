@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AnalyticsChart } from "@/admin/components/dashboard/AnalyticsChart";
 import { CreditCard, IndianRupee, RotateCcw } from "lucide-react";
+import usePlatformData from "@/lib/usePlatformData";
 
 const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
 
@@ -21,42 +22,28 @@ function Stat({ icon: Icon, label, value }: { icon: any; label: string; value: n
 
 export default function BusinessDashboard() {
   const [activePlans, setActivePlans] = useState(0);
-  const [totalRevenue, setTotalRevenue] = useState(0);
   const [refunds, setRefunds] = useState(0);
-  const [analytics, setAnalytics] = useState<any | null>(null);
-  const [recent, setRecent] = useState<any[]>([]);
+  const { adminAnalytics, transactions, recentSubscriptions, plans, loading } = usePlatformData();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    // Plans count
-    fetch(`${API_URL}/plans/`, { headers: { Authorization: `Token ${token}` } })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        const arr = Array.isArray(d?.results) ? d.results : (Array.isArray(d) ? d : []);
-        setActivePlans(arr.length);
-      }).catch(() => setActivePlans(0));
-    // Revenue and business analytics
-    fetch(`${API_URL}/admin/analytics/`, { headers: { Authorization: `Token ${token}` } })
-      .then(r=>r.ok?r.json():null)
-      .then(d=> {
-        setTotalRevenue(Number(d?.stats?.total_revenue) || 0);
-        setAnalytics(d || null);
-        const ra = Array.isArray(d?.recent_activity) ? d.recent_activity : [];
-        setRecent(ra);
-      })
-      .catch(()=> { setTotalRevenue(0); setAnalytics(null); setRecent([]); });
-    // Refunds processed (approx via current user's transactions status)
-    fetch(`${API_URL}/transactions/`, { headers: { Authorization: `Token ${token}` } })
-      .then(r=>r.ok?r.json():null)
-      .then(d=> {
-        const arr = Array.isArray(d?.results) ? d.results : (Array.isArray(d) ? d : []);
-        const cnt = arr.filter((t:any)=> ["refund","refunded","chargeback"].includes(String(t.status||'').toLowerCase())).length;
-        setRefunds(cnt);
-      }).catch(()=> setRefunds(0));
-  }, []);
+    setActivePlans(plans.length || 0);
+    const refundCnt = transactions.filter((t:any)=> ["refund","refunded","chargeback"].includes(String(t.status||'').toLowerCase())).length;
+    setRefunds(refundCnt);
+  }, [plans, transactions]);
 
-  const revenueByDay = useMemo(() => Array.isArray(analytics?.revenue_by_day) ? analytics!.revenue_by_day.map((x:any,i:number)=> ({ name: x?.name || `Day ${i+1}`, value: Number(x?.value)||0 })) : [], [analytics]);
+  const totalRevenue = Number(adminAnalytics?.stats?.total_revenue) || 0;
+  const analytics = adminAnalytics;
+  const recent = Array.isArray(adminAnalytics?.recent_activity) ? adminAnalytics.recent_activity : recentSubscriptions || [];
+
+  const revenueByDay = useMemo(() => {
+    if (Array.isArray(analytics?.revenue_by_day) && analytics.revenue_by_day.length > 0) {
+      return analytics.revenue_by_day.map((x:any,i:number)=> ({ 
+        name: x?.name || x?.day || `Day ${i+1}`, 
+        value: Number(x?.value)||0 
+      }));
+    }
+    return [];
+  }, [analytics]);
   const txnByStatus = useMemo(() => Array.isArray(analytics?.transactions_by_status) ? analytics!.transactions_by_status.map((x:any,i:number)=> ({ name: x?.name || `Status ${i+1}`, value: Number(x?.value)||0 })) : [], [analytics]);
   const planDist = useMemo(() => Array.isArray(analytics?.plan_distribution) ? analytics!.plan_distribution.map((x:any,i:number)=> ({ name: x?.name || `Plan ${i+1}`, value: Number(x?.value)||0 })) : [], [analytics]);
 

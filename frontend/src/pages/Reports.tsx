@@ -26,9 +26,45 @@ const Reports = () => {
   const [exportType, setExportType] = useState<"csv" | "pdf">("csv");
   const [selectedAnalytics, setSelectedAnalytics] = useState<Record<string, boolean>>({ crop_distribution: true, irrigation_distribution: true, fields_over_time: true, plan_mix: true });
   const stats = [
-    { title: "Lifecycle Completion", value: analytics ? `${analytics.lifecycle_completion}%` : "0%", change: "" },
+    { title: "Lifecycle Completion", value: analytics ? `${formatLifecyclePercent(analytics.lifecycle_completion)}` : "0%", change: "" },
     { title: "Active Reports", value: analytics && analytics.has_data ? String((analytics.crop_distribution || []).reduce((a:number,b:any)=>a+b.value,0)) : "0", subtitle: "" },
   ];
+
+  function formatLifecyclePercent(raw: any) {
+    if (raw == null) return '0%';
+    // numeric
+    if (typeof raw === 'number') {
+      return `${Math.round(raw)}%`;
+    }
+    // numeric string
+    if (typeof raw === 'string') {
+      const n = parseFloat(raw);
+      if (!isNaN(n)) return `${Math.round(n)}%`;
+      return raw;
+    }
+    // array of items -> try to find a 'completed' item or aggregate values
+    if (Array.isArray(raw)) {
+      if (raw.length === 0) return '0%';
+      // try to find an explicitly named completed/complete item
+      const completedItem = raw.find((it: any) => typeof it?.name === 'string' && /complete|completed/i.test(it.name));
+      if (completedItem && (typeof completedItem.value === 'number' || typeof completedItem.value === 'string')) {
+        const v = Number(completedItem.value);
+        if (!isNaN(v)) return `${Math.round(v)}%`;
+      }
+      // otherwise, sum numeric values; if sum looks like a percent (<=100) use it, else average
+      const values = raw.map((it:any) => Number(it?.value || 0)).filter(v => !isNaN(v));
+      if (values.length === 0) return '0%';
+      const sum = values.reduce((a:number,b:number)=>a+b,0);
+      if (sum <= 100) return `${Math.round(sum)}%`;
+      return `${Math.round(sum / values.length)}%`;
+    }
+    // fallback
+    try {
+      const asNum = Number(raw);
+      if (!isNaN(asNum)) return `${Math.round(asNum)}%`;
+    } catch {}
+    return String(raw);
+  }
 
   // Additional analytics: field growth over time and plan mix
   const [extra, setExtra] = useState<{ planMix: any[]; fieldsOverTime: any[] } | null>(null);

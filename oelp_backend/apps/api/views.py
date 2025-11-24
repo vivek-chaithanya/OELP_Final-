@@ -648,9 +648,17 @@ class AdminAnalyticsView(APIView):
         try:
             from django.db.models import Sum
 
-            revenue_amount = (
-                Transaction.objects.filter(status__in=["success", "paid", "completed"]).aggregate(sum_amt=Sum("amount"))
+            # Sum successful payment transactions, exclude refunds
+            # Include payments that may have been marked 'refunded' so the ledger remains consistent
+            payments_sum = (
+                Transaction.objects.filter(status__in=["success", "paid", "completed", "refunded"], transaction_type="payment").aggregate(sum_amt=Sum("amount"))
             )["sum_amt"] or 0
+            # Sum successful refund transactions
+            refunds_sum = (
+                Transaction.objects.filter(status__in=["success", "paid", "completed"], transaction_type="refund").aggregate(sum_amt=Sum("amount"))
+            )["sum_amt"] or 0
+            # Revenue = payments - refunds
+            revenue_amount = payments_sum - refunds_sum
         except Exception:
             revenue_amount = 0
 
@@ -685,19 +693,40 @@ class AdminAnalyticsView(APIView):
 
         # Business-centric analytics
         from django.db.models.functions import TruncDate
-        from django.db.models import Sum
+        from django.db.models import Sum, Case, When, F, Value, FloatField
         last_7_days = datetime.now().date() - timedelta(days=6)
+        # Compute net amount per day: payments add, refunds subtract
         revenue_daily_qs = (
-            Transaction.objects.filter(created_at__date__gte=last_7_days, status__in=["success", "paid", "completed"])
+            Transaction.objects.filter(created_at__date__gte=last_7_days, status__in=["success", "paid", "completed", "refunded"])
             .annotate(day=TruncDate("created_at"))
             .values("day")
-            .annotate(amount=Sum("amount"))
+            .annotate(amount=Sum(
+                Case(
+                    When(transaction_type="refund", then=F("amount") * Value(-1.0)),
+                    When(transaction_type="payment", then=F("amount")),
+                    default=Value(0.0),
+                    output_field=FloatField(),
+                )
+            ))
             .order_by("day")
         )
         revenue_by_day = [
             {"name": row["day"].isoformat() if getattr(row.get("day"), "isoformat", None) else str(row.get("day")), "value": float(row["amount"] or 0)}
             for row in revenue_daily_qs
         ]
+        
+        # Ensure we have data for all 7 days (fill missing days with 0)
+        if len(revenue_by_day) < 7:
+            existing_dates = {row["name"] for row in revenue_by_day}
+            for i in range(7):
+                day = (datetime.now().date() - timedelta(days=6-i)).isoformat()
+                if day not in existing_dates:
+                    revenue_by_day.append({"name": day, "value": 0})
+            revenue_by_day.sort(key=lambda x: x["name"])
+        
+        # Calculate weekly revenue (last 7 days)
+        weekly_revenue = sum(row["value"] for row in revenue_by_day)
+        
         # Transactions by status
         txn_status_counts = (
             Transaction.objects.values("status").annotate(cnt=Count("id")).order_by("-cnt")
@@ -721,6 +750,7 @@ class AdminAnalyticsView(APIView):
                 "role_names": role_names,
                 "stats": {
                     "total_revenue": float(revenue_amount) if revenue_amount is not None else 0,
+                    "weekly_revenue": float(weekly_revenue),
                     "active_end_users": active_end_users,
                     "total_fields": total_fields,
                     "active_admins": active_admins,
@@ -735,6 +765,23 @@ class AdminAnalyticsView(APIView):
                 "recent_activity": ActivitySerializer(recent_activity, many=True).data,
             }
         )
+
+
+class RefundsSummaryView(APIView):
+    """Admin-only view that returns sums for payments and refunds and net revenue"""
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [HasRole]
+    required_roles = ["SuperAdmin", "Admin"]
+
+    def get(self, request):
+        from django.db.models import Sum
+        payments_sum = (
+            Transaction.objects.filter(status__in=["success", "paid", "completed", "refunded"], transaction_type="payment").aggregate(sum_amt=Sum("amount"))
+        )["sum_amt"] or 0
+        refunds_sum = (
+            Transaction.objects.filter(status__in=["success", "paid", "completed", "refunded"], transaction_type="refund").aggregate(sum_amt=Sum("amount"))
+        )["sum_amt"] or 0
+        return Response({"payments_sum": float(payments_sum), "refunds_sum": float(refunds_sum), "net_revenue": float(payments_sum - refunds_sum)})
 
 
 class PlanFeatureViewSet(viewsets.ModelViewSet):
@@ -1197,44 +1244,57 @@ class UserPlanViewSet(viewsets.ModelViewSet):
             status__in=["success", "paid", "completed"],
             transaction_type="payment"
         ).order_by("-created_at").first()
-        
+
+        used_fallback = False
         if not payment_txn:
-            return Response({
-                "refund_available": False,
-                "reason": "No payment transaction found for this subscription"
-            })
+            # Fallback: use the most recent successful payment for the user (regardless of plan)
+            payment_txn = Transaction.objects.filter(
+                user=request.user,
+                status__in=["success", "paid", "completed"],
+                transaction_type="payment"
+            ).order_by("-created_at").first()
+            used_fallback = True
         
-        # Get refund policy for this plan type
+        # Get refund policy for this plan type (may be None)
         refund_policy = RefundPolicy.objects.filter(plan_type=user_plan.plan.type).first()
-        if not refund_policy:
-            return Response({
-                "refund_available": False,
-                "reason": "No refund policy found for this plan type"
-            })
-        
-        # Calculate days since purchase
         from django.utils import timezone
-        days_since = (timezone.now() - payment_txn.created_at).days
-        refund_available = days_since <= refund_policy.days_after_purchase
-        
-        # Calculate refund amount
+        days_since = (timezone.now() - payment_txn.created_at).days if payment_txn and payment_txn.created_at else 0
+
+        refund_policy_data = None
         refund_amount = 0
-        if refund_available:
-            refund_amount = float(payment_txn.amount) * (float(refund_policy.refund_percentage) / 100)
-        
-        return Response({
-            "refund_available": refund_available,
-            "refund_policy": {
+        refund_available = False
+
+        if refund_policy:
+            refund_policy_data = {
                 "percentage": float(refund_policy.refund_percentage),
                 "days_after_purchase": refund_policy.days_after_purchase,
-            },
+            }
+            refund_available = days_since <= refund_policy.days_after_purchase
+            if refund_available:
+                refund_amount = float(payment_txn.amount) * (float(refund_policy.refund_percentage) / 100)
+        else:
+            # No refund policy configured: default to full refund
+            refund_policy_data = None
+            refund_available = True
+            # Prefer payment txn amount, else fall back to plan price
+            refund_amount = float(payment_txn.amount) if payment_txn and getattr(payment_txn, 'amount', None) is not None else float(getattr(user_plan.plan, 'price', 0) or 0)
+
+        return Response({
+            "refund_available": refund_available,
+            "refund_policy": refund_policy_data,
             "payment_info": {
-                "amount": float(payment_txn.amount),
-                "date": payment_txn.created_at.isoformat(),
+                "amount": float(payment_txn.amount) if payment_txn and getattr(payment_txn, 'amount', None) is not None else float(getattr(user_plan.plan, 'price', 0) or 0),
+                "date": payment_txn.created_at.isoformat() if payment_txn and getattr(payment_txn, 'created_at', None) else None,
                 "days_since": days_since,
             },
             "refund_amount": round(refund_amount, 2),
-            "reason": f"Refund available: {refund_policy.refund_percentage}% within {refund_policy.days_after_purchase} days" if refund_available else f"Refund period expired ({days_since} days since purchase, policy allows {refund_policy.days_after_purchase} days)"
+            "reason": (
+                f"Refund available: {refund_policy.refund_percentage}% within {refund_policy.days_after_purchase} days" if refund_policy and refund_available else (
+                    f"Refund period expired ({days_since} days since purchase, policy allows {refund_policy.days_after_purchase} days)" if refund_policy and not refund_available else "No refund policy configured (full refund possible)"
+                )
+            ),
+            "used_fallback_payment": used_fallback,
+            "payment_txn_id": payment_txn.id if payment_txn else None,
         })
     
     @action(detail=True, methods=["post"], url_path="downgrade")
@@ -1265,20 +1325,28 @@ class UserPlanViewSet(viewsets.ModelViewSet):
                 
                 if payment_txn:
                     refund_policy = RefundPolicy.objects.filter(plan_type=user_plan.plan.type).first()
+                    # If a refund policy exists, honor its rules. Otherwise, allow a full refund.
                     if refund_policy:
                         days_since = (timezone.now() - payment_txn.created_at).days
                         if days_since <= refund_policy.days_after_purchase:
                             refund_amount = float(payment_txn.amount) * (float(refund_policy.refund_percentage) / 100)
-                            # Create refund transaction
-                            refund_txn = Transaction.objects.create(
-                                user=request.user,
-                                plan=user_plan.plan,
-                                amount=refund_amount,
-                                currency=payment_txn.currency,
-                                status="success",
-                                transaction_type="refund",
-                                refund_reason=refund_reason or "Subscription cancelled by user",
-                            )
+                    else:
+                        # No refund policy configured: default to full refund
+                        refund_amount = float(payment_txn.amount)
+
+                    if refund_amount > 0:
+                        # Create refund transaction
+                        refund_txn = Transaction.objects.create(
+                            user=request.user,
+                            plan=user_plan.plan,
+                            amount=refund_amount,
+                            currency=payment_txn.currency,
+                            status="success",
+                            transaction_type="refund",
+                            refund_reason=refund_reason or "Subscription cancelled by user",
+                            provider_payment_id=payment_txn.provider_payment_id,
+                        )
+                        # Do NOT change the original payment.status here — keep ledger consistent by adding explicit refund txn
             
             # Deactivate current plan
             user_plan.is_active = False
@@ -1303,6 +1371,11 @@ class UserPlanViewSet(viewsets.ModelViewSet):
             if refund_txn:
                 response_data["refund_amount"] = float(refund_amount)
                 response_data["refund_transaction"] = TransactionSerializer(refund_txn).data
+            # Include refund policy information (if computed) so the frontend can show policy details to the user
+            try:
+                response_data["refund_policy"] = refund_policy_data if "refund_policy_data" in locals() else None
+            except Exception:
+                response_data["refund_policy"] = None
             
             return Response(response_data)
         except Exception as e:
@@ -1646,41 +1719,6 @@ class ExportCSVView(APIView):
         writer = csv.writer(buffer)
         writer.writerow(["Field", "Crop", "Hectares"])
         queryset = Field.objects.filter(user=resolved_user)
-        if field_id:
-            queryset = queryset.filter(pk=field_id)
-        if start_date:
-            queryset = queryset.filter(updated_at__date__gte=start_date)
-        if end_date:
-            queryset = queryset.filter(updated_at__date__lte=end_date)
-        for fld in queryset:
-            hectares = (fld.area or {}).get("hectares")
-            writer.writerow([fld.name, getattr(fld.crop, "name", "-"), hectares])
-        buffer.seek(0)
-        response = HttpResponse(buffer.getvalue(), content_type="text/csv")
-        response["Content-Disposition"] = "attachment; filename=report.csv"
-        return response
-
-
-class ExportPDFView(APIView):
-    # Accept token via header or query param; handle auth manually to support new-tab downloads
-    authentication_classes: list = []
-    permission_classes: list = []
-
-    def get(self, request):
-        # Resolve user from Authorization header (Token ...) or token query param
-        resolved_user: CustomUser | None = None
-        try:
-            auth_header = request.headers.get("Authorization") or ""
-            token_value = None
-            if auth_header.startswith("Token "):
-                token_value = auth_header.split(" ", 1)[1]
-            token_value = token_value or request.query_params.get("token") or request.query_params.get("access_token")
-            if token_value:
-                tok = UserAuthToken.objects.filter(access_token=token_value).select_related("user").first()
-                if tok:
-                    resolved_user = tok.user
-        except Exception:
-            resolved_user = None
         if resolved_user is None:
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         # Minimal PDF export with optional date filter
@@ -1712,6 +1750,28 @@ class ExportPDFView(APIView):
         for fld in queryset[:30]:
             p.drawString(100, y, f"Field: {fld.name}")
             y -= 20
+        p.showPage()
+        p.save()
+        buffer.seek(0)
+        response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+        response["Content-Disposition"] = "attachment; filename=report.pdf"
+        return response
+
+
+class ExportPDFView(APIView):
+    authentication_classes: list = []
+    permission_classes: list = []
+
+    def get(self, request):
+        # Minimal PDF export (same as earlier behavior). If reportlab is missing, return 501.
+        try:
+            from reportlab.pdfgen import canvas
+        except Exception:
+            return Response({"detail": "PDF export not available (reportlab missing)"}, status=status.HTTP_501_NOT_IMPLEMENTED)
+
+        buffer = io.BytesIO()
+        p = canvas.Canvas(buffer)
+        p.drawString(100, 800, "OELP Report")
         p.showPage()
         p.save()
         buffer.seek(0)

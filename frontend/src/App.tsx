@@ -22,6 +22,15 @@ import AdminNotifications from "./admin/pages/AdminNotifications";
 import AdminSettings from "./admin/pages/AdminSettings";
 import { AdminLayout } from "./admin/components/layout/AdminLayout";
 import AdminCrops from "./admin/pages/AdminCrops";
+// SuperAdmin portal imports (reuse Admin components with different layout)
+import SuperAdminDashboard from "./superadmin/pages/SuperAdminDashboard";
+import SuperAdminUsers from "./superadmin/pages/SuperAdminUsers";
+import SuperAdminAnalytics from "./superadmin/pages/SuperAdminAnalytics";
+import SuperAdminSubscriptions from "./superadmin/pages/SuperAdminSubscriptions";
+import SuperAdminNotifications from "./superadmin/pages/SuperAdminNotifications";
+import SuperAdminSettings from "./superadmin/pages/SuperAdminSettings";
+import { SuperAdminLayout } from "./superadmin/components/layout/SuperAdminLayout";
+import SuperAdminCrops from "./superadmin/pages/SuperAdminCrops";
 // Agronomist portal imports
 import { AgronomistLayout } from "./agronomist/components/layout/AgronomistLayout";
 import { SupportLayout } from "./support/components/layout/SupportLayout";
@@ -116,6 +125,19 @@ function RequireAgronomist({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
+  const token = localStorage.getItem("token");
+  const { roles, loading } = useRoles();
+  
+  if (!token) return <Navigate to="/login" replace />;
+  if (loading) return <Loading />;
+  
+  const hasSuperAdmin = (roles || []).includes("SuperAdmin");
+  if (!hasSuperAdmin) return <Navigate to="/login" replace />;
+  
+  return <>{children}</>;
+}
+
 function useRoles() {
   const [roles, setRoles] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -166,25 +188,28 @@ function RootRedirect() {
   const token = localStorage.getItem("token");
   const { roles, loading } = useRoles();
   
-  // Always redirect to login if no token
   if (!token) return <Navigate to="/login" replace />;
-  
-  // Show loading while checking roles
   if (loading) return <Loading />;
-  
-  // If token exists but no roles (invalid token), redirect to login
   if (!roles || roles.length === 0) {
     localStorage.removeItem("token");
     return <Navigate to="/login" replace />;
   }
   
+  // Route SuperAdmin to superadmin portal
+  if (roles.includes("SuperAdmin")) return <Navigate to="/superadmin/dashboard" replace />;
+  
+  // Route other roles
   if (roles.includes("Agronomist")) return <Navigate to="/agronomist/dashboard" replace />;
   if (roles.includes("Analyst")) return <Navigate to="/analyst/dashboard" replace />;
   if (roles.includes("Business")) return <Navigate to="/business/dashboard" replace />;
   if (roles.includes("Developer")) return <Navigate to="/developer/dashboard" replace />;
   if (roles.includes("Support")) return <Navigate to="/support/dashboard" replace />;
-  const isAdmin = roles.some((r) => ADMIN_ROLES.includes(r));
-  return <Navigate to={isAdmin ? "/admin/dashboard" : "/dashboard"} replace />;
+  
+  // Route Admin (without SuperAdmin) to admin portal
+  if (roles.includes("Admin")) return <Navigate to="/admin/dashboard" replace />;
+  
+  // Default to user dashboard
+  return <Navigate to="/dashboard" replace />;
 }
 
 function RequireRole({ allowed, redirectTo, children }: { allowed: string[]; redirectTo: string; children: React.ReactNode }) {
@@ -226,9 +251,9 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
   const isUserOnly = (roles || []).length === 1 && (roles || []).includes("End-App-User");
   if (isUserOnly) return <Navigate to="/dashboard" replace />;
   
-  // If user doesn't have any admin roles, redirect to admin login
-  const hasAdminRole = (roles || []).some((r) => ADMIN_ROLES.includes(r));
-  if (!hasAdminRole) return <Navigate to="/login" replace />;
+  // Check for Admin role (but not SuperAdmin for this route)
+  const hasAdmin = (roles || []).includes("Admin") && !(roles || []).includes("SuperAdmin");
+  if (!hasAdmin) return <Navigate to="/login" replace />;
   
   return <>{children}</>;
 }
@@ -248,7 +273,17 @@ const App = () => (
           <Route path="/subscriptions" element={<RequireUser><Layout><Subscriptions /></Layout></RequireUser>} />
           <Route path="/reports" element={<RequireUser><Layout><Reports /></Layout></RequireUser>} />
           <Route path="/settings" element={<RequireUser><Layout><Settings /></Layout></RequireUser>} />
-          {/* Admin routes share the unified login page */}
+          {/* SuperAdmin routes */}
+          <Route path="/superadmin" element={<Navigate to="/superadmin/dashboard" replace />} />
+          <Route path="/superadmin/dashboard" element={<RequireSuperAdmin><SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout></RequireSuperAdmin>} />
+          <Route path="/superadmin/users" element={<RequireSuperAdmin><SuperAdminLayout><SuperAdminUsers /></SuperAdminLayout></RequireSuperAdmin>} />
+          <Route path="/superadmin/analytics" element={<RequireSuperAdmin><SuperAdminLayout><SuperAdminAnalytics /></SuperAdminLayout></RequireSuperAdmin>} />
+          <Route path="/superadmin/subscriptions" element={<RequireSuperAdmin><SuperAdminLayout><SuperAdminSubscriptions /></SuperAdminLayout></RequireSuperAdmin>} />
+          <Route path="/superadmin/notifications" element={<RequireSuperAdmin><SuperAdminLayout><SuperAdminNotifications /></SuperAdminLayout></RequireSuperAdmin>} />
+          <Route path="/superadmin/settings" element={<RequireSuperAdmin><SuperAdminLayout><SuperAdminSettings /></SuperAdminLayout></RequireSuperAdmin>} />
+          <Route path="/superadmin/crops" element={<RequireSuperAdmin><SuperAdminLayout><SuperAdminCrops /></SuperAdminLayout></RequireSuperAdmin>} />
+          
+          {/* Admin routes - now restricted to Admin role only (not SuperAdmin) */}
           <Route path="/admin" element={<Navigate to="/login" replace />} />
           <Route path="/admin/login" element={<Navigate to="/login" replace />} />
           <Route path="/admin/dashboard" element={<RequireAdmin><AdminLayout><AdminDashboard /></AdminLayout></RequireAdmin>} />
@@ -258,6 +293,7 @@ const App = () => (
           <Route path="/admin/notifications" element={<RequireAdmin><AdminLayout><AdminNotifications /></AdminLayout></RequireAdmin>} />
           <Route path="/admin/settings" element={<RequireAdmin><AdminLayout><AdminSettings /></AdminLayout></RequireAdmin>} />
           <Route path="/admin/crops" element={<RequireAdmin><AdminLayout><AdminCrops /></AdminLayout></RequireAdmin>} />
+          
           {/* Agronomist routes */}
           <Route path="/agronomist" element={<Navigate to="/agronomist/dashboard" replace />} />
           <Route path="/agronomist/dashboard" element={<RequireAgronomist><AgronomistLayout><AgronomistDashboard /></AgronomistLayout></RequireAgronomist>} />

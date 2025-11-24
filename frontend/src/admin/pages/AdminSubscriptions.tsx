@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DollarSign, Users, TrendingUp, CreditCard } from "lucide-react";
+import usePlatformData from "@/lib/usePlatformData";
 
 const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
 
@@ -9,6 +10,8 @@ interface PlanRow { id: number; name: string; price: string; type: string; }
 export default function AdminSubscriptions() {
   const [plans, setPlans] = useState<PlanRow[]>([]);
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const { adminAnalytics, transactions: hookTx = [], plans: hookPlans = [], loading } = usePlatformData();
+
   const [metrics, setMetrics] = useState({
     total_revenue: 0,
     active_subscriptions: 0,
@@ -21,6 +24,7 @@ export default function AdminSubscriptions() {
     
     const loadData = async () => {
       try {
+        // Fetch plans and all user subscriptions
         const [plansRes, subscriptionsRes] = await Promise.all([
           fetch(`${API_URL}/plans/`, { headers: { Authorization: `Token ${token}` } }),
           fetch(`${API_URL}/subscriptions/`, { headers: { Authorization: `Token ${token}` } })
@@ -29,27 +33,40 @@ export default function AdminSubscriptions() {
         const plansData = plansRes.ok ? await plansRes.json() : { results: [] };
         const subscriptionsData = subscriptionsRes.ok ? await subscriptionsRes.json() : { results: [] };
 
-        const plansItems = Array.isArray(plansData?.results) ? plansData.results : plansData || [];
-        const subscriptionsItems = Array.isArray(subscriptionsData?.results) ? subscriptionsData.results : subscriptionsData || [];
+        const plansItems = Array.isArray(plansData?.results) ? plansData.results : (Array.isArray(plansData) ? plansData : []);
+        const subscriptionsItems = Array.isArray(subscriptionsData?.results) ? subscriptionsData.results : (Array.isArray(subscriptionsData) ? subscriptionsData : []);
 
         setPlans(plansItems);
         setSubscriptions(subscriptionsItems);
 
-        // Calculate metrics
-        const totalRevenue = subscriptionsItems.reduce((sum: number, sub: any) => {
-          return sum + (Number(sub.plan?.price) || 0);
-        }, 0);
+        // Compute metrics: prefer adminAnalytics from hook
+        if (adminAnalytics) {
+          const s = adminAnalytics.stats || {};
+          // active_subscriptions: sum of plan_distribution values (active user plans by plan)
+          const planDist = Array.isArray(adminAnalytics.plan_distribution) ? adminAnalytics.plan_distribution : [];
+          const activeSubsFromDist = planDist.reduce((acc:any, p:any) => acc + (Number(p.value) || 0), 0);
 
-        const activeSubscriptions = subscriptionsItems.filter((sub: any) => 
-          sub.is_active !== false
-        ).length;
+          // monthly_revenue: sum revenue_by_day (actually last 7 days from backend)
+          const revenueByDay = Array.isArray(adminAnalytics.revenue_by_day) ? adminAnalytics.revenue_by_day : [];
+          const recentRevenue = revenueByDay.reduce((a:any, b:any) => a + (Number(b.value) || 0), 0);
 
-        setMetrics({
-          total_revenue: totalRevenue,
-          active_subscriptions: activeSubscriptions,
-          total_plans: plansItems.length,
-          monthly_revenue: totalRevenue // Simplified - in real app would calculate monthly
-        });
+          setMetrics({
+            total_revenue: Number(s.total_revenue) || 0,
+            active_subscriptions: activeSubsFromDist || subscriptionsItems.filter((sub: any) => sub.is_active !== false).length,
+            total_plans: plansItems.length,
+            monthly_revenue: recentRevenue
+          });
+        } else {
+          // Fallback calculation from fetched subscriptions (less accurate)
+          const activeSubscriptions = subscriptionsItems.filter((sub: any) => sub.is_active !== false).length;
+
+          setMetrics({
+            total_revenue: 0, // Can't calculate without transaction data
+            active_subscriptions: activeSubscriptions,
+            total_plans: plansItems.length,
+            monthly_revenue: 0
+          });
+        }
 
       } catch (error) {
         console.error('Error loading subscription data:', error);
@@ -57,7 +74,31 @@ export default function AdminSubscriptions() {
     };
 
     loadData();
-  }, []);
+  }, [adminAnalytics]);
+
+  // Keep metrics in sync when adminAnalytics updates
+  useEffect(() => {
+    if (!adminAnalytics) return;
+    const s = adminAnalytics.stats || {};
+    const planDist = Array.isArray(adminAnalytics.plan_distribution) ? adminAnalytics.plan_distribution : [];
+    const activeSubsFromDist = planDist.reduce((acc:any, p:any) => acc + (Number(p.value) || 0), 0);
+    const revenueByDay = Array.isArray(adminAnalytics.revenue_by_day) ? adminAnalytics.revenue_by_day : [];
+    const weeklyRevenue = revenueByDay.reduce((a:any, b:any) => a + (Number(b.value) || 0), 0);
+    
+    setMetrics((m) => ({ 
+      ...m,
+      total_revenue: Number(s.total_revenue) || m.total_revenue,
+      active_subscriptions: activeSubsFromDist || m.active_subscriptions,
+      monthly_revenue: weeklyRevenue || Number(s.weekly_revenue) || m.monthly_revenue
+    }));
+  }, [adminAnalytics]);
+
+  // Update plans list when hook provides data
+  useEffect(() => {
+    if (Array.isArray(hookPlans) && hookPlans.length > 0) {
+      setPlans(hookPlans);
+    }
+  }, [hookPlans]);
 
   return (
     <div className="space-y-6">
@@ -73,8 +114,8 @@ export default function AdminSubscriptions() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">₹{metrics.total_revenue}</div>
-            <p className="text-xs text-muted-foreground">All time</p>
+            <div className="text-2xl font-bold text-primary">₹{metrics.total_revenue.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">All time (net of refunds)</p>
           </CardContent>
         </Card>
         
@@ -102,12 +143,12 @@ export default function AdminSubscriptions() {
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">Weekly Revenue</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">₹{metrics.monthly_revenue}</div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <div className="text-2xl font-bold text-primary">₹{metrics.monthly_revenue.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Last 7 days</p>
           </CardContent>
         </Card>
       </div>
@@ -143,24 +184,25 @@ export default function AdminSubscriptions() {
       <Card>
         <CardHeader>
           <CardTitle>Recent Subscribers</CardTitle>
-          <CardDescription>Latest subscription activities</CardDescription>
+          <CardDescription>Latest subscription activities (excluding Free plan)</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {subscriptions.slice(0, 5).map((sub) => (
-              <div key={sub.id} className="flex justify-between items-center p-3 border rounded-lg">
-                <div>
-                  <p className="font-medium">{sub.user?.full_name || sub.user?.email || 'Unknown User'}</p>
-                  <p className="text-sm text-muted-foreground">{sub.plan?.name || 'No Plan'}</p>
+            {subscriptions.filter((sub) => sub.plan?.name?.toLowerCase() !== 'free').length > 0 ? (
+              subscriptions.filter((sub) => sub.plan?.name?.toLowerCase() !== 'free').slice(0, 5).map((sub) => (
+                <div key={sub.id} className="flex justify-between items-center p-3 border rounded-lg">
+                  <div>
+                    <p className="font-medium">{sub.user?.full_name || sub.user?.username || sub.user?.email || 'Unknown User'}</p>
+                    <p className="text-sm text-muted-foreground">{sub.plan?.name || sub.plan_name || 'No Plan'}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium">₹{((sub.plan?.price || sub.plan_price || 0)).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">{(sub.created_at || sub.start_date || '').slice(0, 10) || 'N/A'}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium">₹{sub.plan?.price || 0}</p>
-                  <p className="text-xs text-muted-foreground">{sub.created_at?.slice(0,10) || ''}</p>
-                </div>
-              </div>
-            ))}
-            {subscriptions.length === 0 && (
-              <p className="text-sm text-muted-foreground">No recent subscribers</p>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">No paid subscribers yet</p>
             )}
           </div>
         </CardContent>
