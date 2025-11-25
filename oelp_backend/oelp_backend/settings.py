@@ -12,8 +12,13 @@ load_dotenv(dotenv_path=REPO_ROOT / ".env")
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ------------------- SECURITY -------------------
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "local-secret-key")
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "5mv#&jb$voaf^7klmx!_9ot41h+jf!+=vosqw$a$qe5u=v-=l(")
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
+
+# Raise error if SECRET_KEY is not set in production
+if not DEBUG and SECRET_KEY == "5mv#&jb$voaf^7klmx!_9ot41h+jf!+=vosqw$a$qe5u=v-=l(":
+    raise ValueError("DJANGO_SECRET_KEY must be set in production!")
+
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
 
 # Add Vercel domains
@@ -107,7 +112,7 @@ if DATABASE_URL:
         "default": dj_database_url.config(
             default=DATABASE_URL,
             conn_max_age=600,
-            ssl_require=os.getenv("DB_SSL_REQUIRE", "true").lower() == "true",
+            ssl_require=True,  # Always require SSL for production
             engine=FORCED_ENGINE,
         )
     }
