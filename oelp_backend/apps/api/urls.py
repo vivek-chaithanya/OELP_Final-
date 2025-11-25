@@ -55,6 +55,7 @@ urlpatterns = [
     path("admin/analytics/", views.AdminAnalyticsView.as_view(), name="admin-analytics"),
     path("admin/transactions/refunds-summary/", views.RefundsSummaryView.as_view(), name="refunds-summary"),
     path("auth/ensure-role/", views.EnsureRoleView.as_view(), name="ensure-role"),
+    path("me/", views.MeView.as_view(), name="auth-me"),
     path("", include(router.urls)),
 ]
 

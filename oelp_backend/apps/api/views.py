@@ -7,18 +7,13 @@ import secrets
 from datetime import date, datetime, timedelta
 
 from django.db import IntegrityError
-from rest_framework import status
-from rest_framework.response import Response
-
-razorpay = None  # type: ignore
-from django.conf import settings
 from django.contrib.auth import authenticate
-from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count, F, Q
 from django.http import HttpResponse
-from rest_framework import mixins, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.models_app.token import UserAuthToken
@@ -119,24 +114,33 @@ class SignUpView(APIView):
 
 
 class LoginView(APIView):
-    authentication_classes: list = []
-    permission_classes: list = []
+    permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = authenticate(request, username=serializer.validated_data["username"], password=serializer.validated_data["password"])
-        if not user:
-            return Response({"detail": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST)
-        # Ensure role exists on first login if missing
-        try:
-            end_role, _ = Role.objects.get_or_create(name="End-App-User")
-            UserRole.objects.get_or_create(user=user, role=end_role, defaults={"userrole_id": user.email or user.username})
-        except Exception:
-            pass
-        token_value = secrets.token_urlsafe(48)
-        UserAuthToken.objects.update_or_create(user=user, defaults={"access_token": token_value})
-        return Response({"token": token_value})
+        if serializer.is_valid():
+            username = serializer.validated_data['username']
+            password = serializer.validated_data['password']
+            
+            user = authenticate(username=username, password=password)
+            
+            if user:
+                token, created = Token.objects.get_or_create(user=user)
+                return Response({
+                    'token': token.key,
+                    'user': {
+                        'id': user.id,
+                        'username': user.username,
+                        'email': user.email if hasattr(user, 'email') else '',
+                        'full_name': user.full_name if hasattr(user, 'full_name') else '',
+                    }
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'detail': 'Invalid credentials'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LogoutView(APIView):
@@ -1688,13 +1692,6 @@ class FakeChargeView(APIView):
         # Create a successful transaction (fake charge)
         txn = Transaction.objects.create(
             user=request.user,
-            plan=plan,
-            amount=plan.price,
-            currency="INR",
-            status="success",
-        )
-
-        # Activate the plan for the user
         from django.utils import timezone
         start = timezone.now().date()
         end = start + timedelta(days=int(plan.duration or 30))
@@ -2321,4 +2318,43 @@ def health_check(request):
         'debug': settings.DEBUG,
         'database': 'connected' if connection.ensure_connection() else 'disconnected'
     })
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def me_view(request):
+    """Get or update current user profile"""
+    user = request.user
+    
+    if request.method == 'GET':
+        return Response({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email if hasattr(user, 'email') else '',
+            'full_name': user.full_name if hasattr(user, 'full_name') else '',
+            'phone_number': user.phone_number if hasattr(user, 'phone_number') else '',
+            'avatar': user.avatar if hasattr(user, 'avatar') else '',
+        })
+    
+    elif request.method == 'PUT':
+        # Update user profile
+        data = request.data
+        if 'full_name' in data:
+            user.full_name = data['full_name']
+        if 'phone_number' in data:
+            user.phone_number = data['phone_number']
+        if 'avatar' in data:
+            user.avatar = data['avatar']
+        if 'email' in data:
+            user.email = data['email']
+        
+        user.save()
+        
+        return Response({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'full_name': user.full_name,
+            'phone_number': user.phone_number,
+            'avatar': user.avatar,
+        })
 

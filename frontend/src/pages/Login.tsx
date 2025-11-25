@@ -36,19 +36,40 @@ const Login = () => {
       toast.error("Please fill in all fields");
       return;
     }
-    console.log('📡 Login request to:', `${API_URL}/auth/login/`); // Debug log
-    const res = await fetch(`${API_URL}/auth/login/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(loginData),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.token) localStorage.setItem("token", data.token);
-      toast.success("Welcome back!");
-      navigate("/");
-    } else {
-      toast.error("Invalid credentials");
+    
+    try {
+      console.log('📡 Login request to:', `${API_URL}/auth/login/`);
+      const res = await fetch(`${API_URL}/auth/login/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(loginData),
+      });
+      
+      console.log('📨 Login response status:', res.status);
+      
+      if (res.ok) {
+        const data = await res.json();
+        console.log('✅ Login response data:', data);
+        
+        if (data.token) {
+          localStorage.setItem("token", data.token);
+          // Also store user info if needed
+          if (data.user) {
+            localStorage.setItem("user", JSON.stringify(data.user));
+          }
+          toast.success("Welcome back!");
+          navigate("/");
+        } else {
+          toast.error("Login succeeded but no token received");
+        }
+      } else {
+        const error = await res.json().catch(() => ({}));
+        console.error('❌ Login error:', error);
+        toast.error(error.detail || "Invalid credentials");
+      }
+    } catch (error: any) {
+      console.error('❌ Login network error:', error);
+      toast.error(error?.message || "Network error during login");
     }
   };
 
