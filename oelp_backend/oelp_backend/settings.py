@@ -15,12 +15,24 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "local-secret-key")
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
-CORS_ALLOW_ALL_ORIGINS = True
+
+# Add Vercel domains
+if '.vercel.app' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('.vercel.app')
+if 'oelp-backend.vercel.app' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('oelp-backend.vercel.app')
+
+# ------------------- CORS -------------------
+CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL", "true").lower() == "true"
 CORS_ALLOWED_ORIGINS = [
+    "https://oelp-final-4q5s.vercel.app",
+    "https://oelp-backend.vercel.app",
     "http://localhost:8080",
     "http://127.0.0.1:8080",
 ]
 CSRF_TRUSTED_ORIGINS = [
+    "https://oelp-final-4q5s.vercel.app",
+    "https://oelp-backend.vercel.app",
     "http://localhost:8080",
     "http://127.0.0.1:8080",
     "https://*.onrender.com",
@@ -136,16 +148,6 @@ else:
     DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
     STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
-# ------------------- CORS -------------------
-CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL", "true").lower() == "true"
-
-# Allow CSRF from common Render domains if needed (not required for token auth)
-CSRF_TRUSTED_ORIGINS = [
-    "https://*.onrender.com",
-    "https://*.vercel.app",
-    *[f"https://{h.strip()}" for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()],
-]
-
 # ------------------- REST FRAMEWORK -------------------
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
@@ -193,3 +195,25 @@ USE_I18N = True
 USE_TZ = True
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# ------------------- LOGGING -------------------
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": os.getenv("DJANGO_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+    },
+}
