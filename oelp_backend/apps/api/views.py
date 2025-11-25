@@ -1244,6 +1244,7 @@ class UserPlanViewSet(viewsets.ModelViewSet):
                 amount=user_plan.plan.price,
                 currency="USD",
                 status="paid",
+                transaction_type="payment",
             )
         except Exception:
             pass
@@ -1692,6 +1693,13 @@ class FakeChargeView(APIView):
         # Create a successful transaction (fake charge)
         txn = Transaction.objects.create(
             user=request.user,
+            plan=plan,
+            amount=plan.price,
+            currency="INR",
+            status="success",
+            transaction_type="payment",
+        )
+
         from django.utils import timezone
         start = timezone.now().date()
         end = start + timedelta(days=int(plan.duration or 30))
