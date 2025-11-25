@@ -1908,8 +1908,8 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        user_roles = list(user.user_roles.select_related("role).values_list("role__name", flat=True))
-        
+        user_roles = list(user.user_roles.select_related("role").values_list("role__name", flat=True))
+
         # Support team sees all tickets
         if "Support" in user_roles or "Admin" in user_roles or "SuperAdmin" in user_roles:
             return SupportTicket.objects.all().select_related(
