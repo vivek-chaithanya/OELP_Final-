@@ -20,10 +20,6 @@ if not SECRET_KEY:
 
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
 
-# Raise error if SECRET_KEY is not set in production
-if not DEBUG and SECRET_KEY == "local-dev-key-only-change-this":
-    raise ValueError("DJANGO_SECRET_KEY must be set in production!")
-
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
 
 # Add Vercel domains
@@ -160,7 +156,7 @@ else:
 
 # ------------------- REST FRAMEWORK -------------------
 REST_FRAMEWORK = {
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],  # Changed from IsAuthenticated
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
     "DEFAULT_AUTHENTICATION_CLASSES": ["apps.api.auth.TokenAuthentication"],
     "DEFAULT_PAGINATION_CLASS": "apps.api.pagination.DefaultPageNumberPagination",
     "PAGE_SIZE": 20,
@@ -171,6 +167,12 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
+
+# Disable browsable API in production (only use JSON)
+if not DEBUG:
+    REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"] = [
+        "rest_framework.renderers.JSONRenderer",
+    ]
 
 SPECTACULAR_SETTINGS = {"TITLE": "OELP API", "VERSION": "1.0.0"}
 
