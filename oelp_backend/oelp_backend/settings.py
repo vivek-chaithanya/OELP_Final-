@@ -12,11 +12,11 @@ load_dotenv(dotenv_path=REPO_ROOT / ".env")
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ------------------- SECURITY -------------------
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "5mv#&jb$voaf^7klmx!_9ot41h+jf!+=vosqw$a$qe5u=v-=l(")
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "local-dev-key-only-change-this")
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
 
 # Raise error if SECRET_KEY is not set in production
-if not DEBUG and SECRET_KEY == "5mv#&jb$voaf^7klmx!_9ot41h+jf!+=vosqw$a$qe5u=v-=l(":
+if not DEBUG and SECRET_KEY == "local-dev-key-only-change-this":
     raise ValueError("DJANGO_SECRET_KEY must be set in production!")
 
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
