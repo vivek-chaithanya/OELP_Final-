@@ -21,7 +21,6 @@
     }
   ],
   "env": {
-    "DJANGO_SETTINGS_MODULE": "oelp_backend.settings",
-    "PYTHONUNBUFFERED": "1"
+    "DJANGO_SETTINGS_MODULE": "oelp_backend.settings"
   }
 }

@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('models_app', '0008_add_metadata_to_notification'),
+        ('models_app', '0007_alter_notification_options_remove_customuser_role_and_more'),  # Changed from 0008 to 0007
     ]
 
     operations = [

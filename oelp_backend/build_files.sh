@@ -13,13 +13,7 @@ else
     exit 1
 fi
 
-# Don't run migrations during build - run them manually
-# echo "🗄️ Running migrations..."
-# python manage.py migrate --noinput
-
 echo "📦 Collecting static files..."
-python manage.py collectstatic --noinput --clear || {
-    echo "⚠️ Static collection failed, but continuing..."
-}
+python manage.py collectstatic --noinput --clear || echo "⚠️ Static collection skipped"
 
-echo "✅ Build completed successfully!"
+echo "✅ Build completed!"
