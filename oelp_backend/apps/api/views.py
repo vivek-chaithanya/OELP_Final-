@@ -6,16 +6,19 @@ import os
 import secrets
 from datetime import date, datetime, timedelta
 
+from django.db import IntegrityError
+from rest_framework import status
+from rest_framework.response import Response
+
 razorpay = None  # type: ignore
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count, F, Q
 from django.http import HttpResponse
-from rest_framework import mixins, status, viewsets
+from rest_framework import mixins, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.models_app.token import UserAuthToken
@@ -87,6 +90,32 @@ class SignUpView(APIView):
         token_value = secrets.token_urlsafe(48)
         UserAuthToken.objects.update_or_create(user=user, defaults={"access_token": token_value})
         return Response({"user": UserSerializer(user).data, "token": token_value}, status=status.HTTP_201_CREATED)
+        try:
+            user = serializer.save()
+            # Ensure default role assignment for end users
+            try:
+                end_role, _ = Role.objects.get_or_create(name="End-App-User")
+                UserRole.objects.get_or_create(user=user, role=end_role, defaults={"userrole_id": user.email or user.username})
+            except Exception:
+                pass
+            token_value = secrets.token_urlsafe(48)
+            UserAuthToken.objects.update_or_create(user=user, defaults={"access_token": token_value})
+            return Response({"user": UserSerializer(user).data, "token": token_value}, status=status.HTTP_201_CREATED)
+        except IntegrityError as e:
+            # Handle duplicate email/username
+            error_msg = str(e)
+            if 'email' in error_msg:
+                return Response({
+                    'email': ['A user with this email already exists.']
+                }, status=status.HTTP_400_BAD_REQUEST)
+            elif 'username' in error_msg:
+                return Response({
+                    'username': ['A user with this username already exists.']
+                }, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response({
+                    'detail': 'User with these credentials already exists.'
+                }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LoginView(APIView):
@@ -1871,6 +1900,7 @@ class AnalyticsSummaryView(APIView):
 
 class SupportTicketViewSet(viewsets.ModelViewSet):
     """
+
     Support Tickets for End Users and Support team
     - End users can create tickets
     - Support team can view, assign, forward, and resolve tickets
