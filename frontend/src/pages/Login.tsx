@@ -23,7 +23,12 @@ const Login = () => {
     avatar: "",
   });
 
-  const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
+  // Fixed: Use VITE_API_BASE_URL and add deployed backend as fallback
+  const API_URL = (import.meta as any).env.VITE_API_BASE_URL || 
+                  (import.meta as any).env.VITE_API_URL || 
+                  'https://oelp-backend.vercel.app/api';
+  
+  console.log('🔧 Using API URL:', API_URL); // Debug log
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,6 +36,7 @@ const Login = () => {
       toast.error("Please fill in all fields");
       return;
     }
+    console.log('📡 Login request to:', `${API_URL}/auth/login/`); // Debug log
     const res = await fetch(`${API_URL}/auth/login/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -40,7 +46,6 @@ const Login = () => {
       const data = await res.json();
       if (data.token) localStorage.setItem("token", data.token);
       toast.success("Welcome back!");
-      // Decide default redirect based on roles fetched lazily by RootRedirect
       navigate("/");
     } else {
       toast.error("Invalid credentials");
@@ -65,6 +70,7 @@ const Login = () => {
     }
     try {
       setSubmitting(true);
+      console.log('📡 Signup request to:', `${API_URL}/auth/signup/`); // Debug log
       const res = await fetch(`${API_URL}/auth/signup/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -263,6 +269,7 @@ const Login = () => {
                 <Button onClick={async () => {
                   if (!reset.username || !reset.new_password || !reset.confirm_password) { toast.error("Fill all fields"); return; }
                   if (reset.new_password !== reset.confirm_password) { toast.error("Passwords do not match"); return; }
+                  console.log('📡 Password reset request to:', `${API_URL}/auth/password/reset/`); // Debug log
                   const res = await fetch(`${API_URL}/auth/password/reset/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reset) });
                   if (res.ok) { toast.success("Password reset. Please sign in."); setResetOpen(false); } else { const err = await res.json().catch(() => ({})); toast.error(err.detail || 'Failed to reset'); }
                 }}>Reset</Button>
