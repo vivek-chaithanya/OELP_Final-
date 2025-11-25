@@ -43,6 +43,23 @@ export default function AnalystReports() {
   const lifecycleData = useMemo(() => (analytics?.lifecycle_completion || []).map((x:any, i:number) => ({ name: x.name || `Item ${i+1}`, value: Number(x.value) || 0 })), [analytics]);
   const cropDist = useMemo(() => (analytics?.crop_distribution || []).map((x:any, i:number) => ({ name: x.name || `Crop ${i+1}`, value: Number(x.value) || 0 })), [analytics]);
 
+  const exportCSV = () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    
+    // Build query params
+    const params = new URLSearchParams();
+    if (filters.crop) params.set("crop", filters.crop);
+    if (filters.region) params.set("region", filters.region);
+    if (filters.date_from) params.set("start_date", filters.date_from);
+    if (filters.date_to) params.set("end_date", filters.date_to);
+    params.set("token", token);
+    
+    // Open export URL in new window
+    const url = `${API_URL}/reports/export/csv/?${params.toString()}`;
+    window.open(url, "_blank");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -51,7 +68,7 @@ export default function AnalystReports() {
           <p className="text-muted-foreground">Generate insights and explore analytics</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={exportCSV}>
             <Download className="mr-2 h-4 w-4" /> Export CSV
           </Button>
         </div>

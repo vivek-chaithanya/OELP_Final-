@@ -24,10 +24,10 @@ export default function AdminSubscriptions() {
     
     const loadData = async () => {
       try {
-        // Fetch plans and all user subscriptions
+        // Fetch plans and recent active subscribers (excluding Free)
         const [plansRes, subscriptionsRes] = await Promise.all([
           fetch(`${API_URL}/plans/`, { headers: { Authorization: `Token ${token}` } }),
-          fetch(`${API_URL}/subscriptions/`, { headers: { Authorization: `Token ${token}` } })
+          fetch(`${API_URL}/subscriptions/recent/`, { headers: { Authorization: `Token ${token}` } })
         ]);
 
         const plansData = plansRes.ok ? await plansRes.json() : { results: [] };
@@ -46,22 +46,21 @@ export default function AdminSubscriptions() {
           const planDist = Array.isArray(adminAnalytics.plan_distribution) ? adminAnalytics.plan_distribution : [];
           const activeSubsFromDist = planDist.reduce((acc:any, p:any) => acc + (Number(p.value) || 0), 0);
 
-          // monthly_revenue: sum revenue_by_day (actually last 7 days from backend)
-          const revenueByDay = Array.isArray(adminAnalytics.revenue_by_day) ? adminAnalytics.revenue_by_day : [];
-          const recentRevenue = revenueByDay.reduce((a:any, b:any) => a + (Number(b.value) || 0), 0);
+          // weekly_revenue: use the stats.weekly_revenue from backend
+          const weeklyRevenue = Math.abs(Number(s.weekly_revenue) || 0);
 
           setMetrics({
-            total_revenue: Number(s.total_revenue) || 0,
-            active_subscriptions: activeSubsFromDist || subscriptionsItems.filter((sub: any) => sub.is_active !== false).length,
+            total_revenue: Math.abs(Number(s.total_revenue) || 0),
+            active_subscriptions: activeSubsFromDist || subscriptionsItems.length,
             total_plans: plansItems.length,
-            monthly_revenue: recentRevenue
+            monthly_revenue: weeklyRevenue
           });
         } else {
           // Fallback calculation from fetched subscriptions (less accurate)
-          const activeSubscriptions = subscriptionsItems.filter((sub: any) => sub.is_active !== false).length;
+          const activeSubscriptions = subscriptionsItems.length;
 
           setMetrics({
-            total_revenue: 0, // Can't calculate without transaction data
+            total_revenue: 0,
             active_subscriptions: activeSubscriptions,
             total_plans: plansItems.length,
             monthly_revenue: 0
@@ -82,14 +81,13 @@ export default function AdminSubscriptions() {
     const s = adminAnalytics.stats || {};
     const planDist = Array.isArray(adminAnalytics.plan_distribution) ? adminAnalytics.plan_distribution : [];
     const activeSubsFromDist = planDist.reduce((acc:any, p:any) => acc + (Number(p.value) || 0), 0);
-    const revenueByDay = Array.isArray(adminAnalytics.revenue_by_day) ? adminAnalytics.revenue_by_day : [];
-    const weeklyRevenue = revenueByDay.reduce((a:any, b:any) => a + (Number(b.value) || 0), 0);
+    const weeklyRevenue = Math.abs(Number(s.weekly_revenue) || 0);
     
     setMetrics((m) => ({ 
       ...m,
-      total_revenue: Number(s.total_revenue) || m.total_revenue,
+      total_revenue: Math.abs(Number(s.total_revenue)) || m.total_revenue,
       active_subscriptions: activeSubsFromDist || m.active_subscriptions,
-      monthly_revenue: weeklyRevenue || Number(s.weekly_revenue) || m.monthly_revenue
+      monthly_revenue: weeklyRevenue
     }));
   }, [adminAnalytics]);
 
@@ -188,15 +186,15 @@ export default function AdminSubscriptions() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {subscriptions.filter((sub) => sub.plan?.name?.toLowerCase() !== 'free').length > 0 ? (
-              subscriptions.filter((sub) => sub.plan?.name?.toLowerCase() !== 'free').slice(0, 5).map((sub) => (
+            {subscriptions.length > 0 ? (
+              subscriptions.slice(0, 5).map((sub) => (
                 <div key={sub.id} className="flex justify-between items-center p-3 border rounded-lg">
                   <div>
                     <p className="font-medium">{sub.user?.full_name || sub.user?.username || sub.user?.email || 'Unknown User'}</p>
                     <p className="text-sm text-muted-foreground">{sub.plan?.name || sub.plan_name || 'No Plan'}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium">₹{((sub.plan?.price || sub.plan_price || 0)).toLocaleString()}</p>
+                    <p className="text-sm font-medium">₹{Number(sub.plan?.price || sub.plan_price || 0).toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground">{(sub.created_at || sub.start_date || '').slice(0, 10) || 'N/A'}</p>
                   </div>
                 </div>

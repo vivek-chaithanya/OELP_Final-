@@ -91,6 +91,15 @@ export default function AdminAnalytics() {
   }, [filteredFields]);
 
   const revenueTrend = useMemo(() => {
+    // Always prefer adminAnalytics revenue_by_day if available (already net of refunds and filled for 7 days)
+    if (adminAnalytics && Array.isArray(adminAnalytics.revenue_by_day) && adminAnalytics.revenue_by_day.length > 0) {
+      return adminAnalytics.revenue_by_day.map((r:any) => ({ 
+        month: r.name || r.day || '', 
+        revenue: Number(r.value || r.amount || 0) 
+      }));
+    }
+    
+    // Fallback to computing from filtered transactions
     const revByMonth: Record<string, number> = {};
     filteredTx.forEach((t:any) => {
       const m = (t.created_at || '').slice(0,7) || 'unknown';
@@ -100,7 +109,7 @@ export default function AdminAnalytics() {
       }
     });
     return Object.keys(revByMonth).sort().map(m => ({ month: m, revenue: revByMonth[m] }));
-  }, [filteredTx]);
+  }, [adminAnalytics, filteredTx]);
 
   const cropDistribution = useMemo(() => {
     const map: Record<string, number> = {};

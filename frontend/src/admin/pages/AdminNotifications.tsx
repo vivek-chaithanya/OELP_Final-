@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -5,127 +6,154 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useEffect, useMemo, useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Check, Plus, Send, Inbox } from "lucide-react";
 import { toast } from "sonner";
-import { Check, Plus } from "lucide-react";
 
 const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
 
-interface NotificationRow { id: number; message: string; receiver?: any; created_at: string; is_read: boolean }
-
 export default function AdminNotifications() {
-  const [items, setItems] = useState<NotificationRow[]>([]);
   const [open, setOpen] = useState(false);
-  const [payload, setPayload] = useState({ receiver: "__REQUIRED__", message: "" });
-  const [cause, setCause] = useState<string>("");
   const [targetRole, setTargetRole] = useState<string>("");
-  const [me, setMe] = useState<{ id?: number; roles?: string[]; created_by_id?: number } | null>(null);
+  const [recipient, setRecipient] = useState<string>("");
+  const [message, setMessage] = useState<string>("");
+  const [notificationType, setNotificationType] = useState<string>("general");
+  const [receivedItems, setReceivedItems] = useState<any[]>([]);
+  const [sentItems, setSentItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
-  const [scheduleType, setScheduleType] = useState<"immediate" | "recurring" | "windowed">("immediate");
-  const [recurrence, setRecurrence] = useState<"daily" | "weekly" | "monthly">("daily");
-  const [windowStart, setWindowStart] = useState<string>("");
-  const [windowEnd, setWindowEnd] = useState<string>("");
+  const [allowedReceivers, setAllowedReceivers] = useState<string[]>([]);
+  
+  // Tags for filtering end-users
+  const [region, setRegion] = useState<string>("");
+  const [cropType, setCropType] = useState<string>("");
 
-  const token = localStorage.getItem("token");
+  useEffect(() => {
+    loadNotifications();
+    loadUsers();
+    loadAllowedReceivers();
+  }, []);
 
-  const load = () => {
-    fetch(`${API_URL}/admin/notifications/`, { headers: { Authorization: `Token ${token}` } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setItems(Array.isArray(d?.results) ? d.results : d || []))
-      .catch(() => {});
+  const loadNotifications = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setLoading(true);
+    try {
+      const [receivedRes, sentRes] = await Promise.all([
+        fetch(`${API_URL}/admin/notifications/?type=received`, { headers: { Authorization: `Token ${token}` } }),
+        fetch(`${API_URL}/admin/notifications/?type=sent`, { headers: { Authorization: `Token ${token}` } })
+      ]);
+      const receivedData = receivedRes.ok ? await receivedRes.json() : { results: [] };
+      const sentData = sentRes.ok ? await sentRes.json() : { results: [] };
+      setReceivedItems(Array.isArray(receivedData?.results) ? receivedData.results : (receivedData || []));
+      setSentItems(Array.isArray(sentData?.results) ? sentData.results : (sentData || []));
+    } catch {
+      setReceivedItems([]);
+      setSentItems([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { 
-    load(); 
-    fetch(`${API_URL}/auth/me/`, { headers: { Authorization: `Token ${token}` } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setMe(d))
-      .catch(() => {});
-    // Load all users; we'll filter recipients by selected role and creator constraints
-    fetch(`${API_URL}/admin/users/`, { headers: { Authorization: `Token ${token}` } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setUsers(Array.isArray(d?.results) ? d.results : d || []))
-      .catch(() => {});
-  }, []);
+  const loadUsers = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    try {
+      const resp = await fetch(`${API_URL}/admin/users/`, { headers: { Authorization: `Token ${token}` } });
+      if (resp.ok) {
+        const d = await resp.json();
+        setUsers(Array.isArray(d?.results) ? d.results : d || []);
+      }
+    } catch {
+      setUsers([]);
+    }
+  };
+
+  const loadAllowedReceivers = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    try {
+      const resp = await fetch(`${API_URL}/admin/notifications/allowed-receivers/`, { headers: { Authorization: `Token ${token}` } });
+      if (resp.ok) {
+        const data = await resp.json();
+        setAllowedReceivers(data.allowed_receivers || []);
+      }
+    } catch {}
+  };
 
   const recipients = useMemo(() => {
     if (!targetRole) return [] as any[];
-    const isSuper = (me?.roles || []).includes('SuperAdmin');
-    const isAdmin = (me?.roles || []).includes('Admin') && !isSuper;
-    let pool = users as any[];
+    let pool = users.filter((u: any) => (u.roles || []).includes(targetRole));
+    
+    // Apply filters for End-App-User
     if (targetRole === 'End-App-User') {
-      pool = pool.filter(u => (u.roles || []).length === 0 || (u.roles || []).every((r:string) => r === 'End-App-User'));
-    } else {
-      pool = pool.filter(u => (u.roles || []).includes(targetRole));
-    }
-    if (isAdmin) {
-      if (targetRole === 'SuperAdmin') {
-        pool = pool.filter(u => me?.created_by_id && Number(u.id) === Number(me.created_by_id));
-      } else {
-        pool = pool.filter(u => u.created_by_id && me?.id && Number(u.created_by_id) === Number(me.id));
-        pool = pool.filter(u => !(u.roles || []).includes('Admin') && !(u.roles || []).includes('SuperAdmin'));
-      }
-    }
-    return pool;
-  }, [users, me, targetRole]);
-
-  const create = async () => {
-    if (!payload.message) { toast.error("Message required"); return; }
-    if (!recipients.some((a:any) => String(a.id) === String(payload.receiver))) { toast.error("Select a valid recipient"); return; }
-    const body: any = { message: payload.message };
-    body.receiver = payload.receiver;
-    // no bulk role send; enforce specific recipient selection per requirements
-    if (scheduleType === "recurring") body.schedule = { type: scheduleType, recurrence };
-    if (scheduleType === "windowed") body.schedule = { type: scheduleType, start: windowStart || undefined, end: windowEnd || undefined };
-
-    const res = await fetch(`${API_URL}/admin/notifications/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
-      body: JSON.stringify(body),
-    });
-    if (res.ok) {
-      toast.success("Notification sent");
-      setOpen(false);
-      setPayload({ receiver: "__REQUIRED__", message: "" });
-      setCause("");
-      setTargetRole("");
-      setScheduleType("immediate");
-      setRecurrence("daily");
-      setWindowStart("");
-      setWindowEnd("");
-      load();
-    } else {
-      let errText = "Failed to send";
-      try { const e = await res.json(); errText = e.detail || errText; } catch {}
-      toast.error(errText);
-    }
-  };
-
-  const markAsRead = async (notificationId: number) => {
-    const res = await fetch(`${API_URL}/admin/notifications/${notificationId}/mark-read/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
-    });
-    if (res.ok) {
-      toast.success("Notification marked as read");
-      load();
-    } else {
-      toast.error("Failed to mark as read");
-    }
-  };
-
-  const markAllAsRead = async () => {
-    const unreadNotifications = items.filter(item => !item.is_read);
-    if (unreadNotifications.length === 0) {
-      toast.info("No unread notifications");
-      return;
+      // Note: Filtering happens on backend, but we can show all end-users here
+      pool = users.filter((u: any) => {
+        const roles = u.roles || [];
+        return roles.length === 0 || roles.every((r: string) => r === 'End-App-User');
+      });
     }
     
-    try {
-      await Promise.all(unreadNotifications.map(item => markAsRead(item.id)));
-      toast.success("All notifications marked as read");
-    } catch (error) {
-      toast.error("Failed to mark all as read");
+    // Exclude SuperAdmin from all lists
+    pool = pool.filter((u: any) => !((u.roles || []).includes('SuperAdmin')));
+    return pool;
+  }, [users, targetRole]);
+
+  const markAllRead = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    const unread = receivedItems.filter((n: any) => n.is_read === false);
+    await Promise.all(unread.map((n: any) => fetch(`${API_URL}/admin/notifications/${n.id}/mark-read/`, { method: 'POST', headers: { Authorization: `Token ${token}` } })));
+    loadNotifications();
+  };
+
+  const send = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    if (!message.trim()) {
+      toast.error("Message is required");
+      return;
+    }
+    if (!targetRole) {
+      toast.error("Please select a receiver role");
+      return;
+    }
+    if (!recipient) {
+      toast.error("Please select a recipient");
+      return;
+    }
+
+    const tags: any = {};
+    if (targetRole === 'End-App-User') {
+      if (region) tags.region = region;
+      if (cropType) tags.crop_type = cropType;
+    }
+
+    const res = await fetch(`${API_URL}/admin/notifications/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Token ${token}` },
+      body: JSON.stringify({ 
+        message, 
+        receiver: recipient,
+        notification_type: notificationType,
+        tags
+      })
+    });
+    
+    if (res.ok) {
+      toast.success("Notification sent successfully");
+      setOpen(false);
+      setTargetRole("");
+      setRecipient("");
+      setMessage("");
+      setRegion("");
+      setCropType("");
+      setNotificationType("general");
+      loadNotifications();
+    } else {
+      const error = await res.json().catch(() => ({}));
+      toast.error(error.detail || "Failed to send notification");
     }
   };
 
@@ -134,173 +162,181 @@ export default function AdminNotifications() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Notifications</h1>
-          <p className="text-muted-foreground">Manage and review all notifications</p>
+          <p className="text-muted-foreground">Manage system communications</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={markAllAsRead}>
-            <Check className="mr-2 h-4 w-4" />
-            Mark as Read
-          </Button>
+          <Button variant="outline" onClick={markAllRead}><Check className="mr-2 h-4 w-4" />Mark All Read</Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button type="button" onClick={() => setOpen(true)}>
+              <Button onClick={() => setOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
-                Create Notification
+                Send Notification
               </Button>
             </DialogTrigger>
-          <DialogContent className="sm:max-w-[525px]">
-            <DialogHeader>
-              <DialogTitle>Create New Notification</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              
-              <div className="space-y-2">
-                <Label>Cause</Label>
-                <Select value={cause} onValueChange={(v) => {
-                  setCause(v);
-                  const defaults: Record<string,string> = {
-                    policy_non_compliance: "Policy Non-Compliance: Please address the noted deviations immediately.",
-                    report_delay: "Report Delay: Kindly submit the pending report as per the agreed timeline.",
-                    performance_issue: "Performance Alert: Review your recent performance metrics and action items.",
-                    billing_discrepancy: "Billing Discrepancy: A mismatch was detected. Please verify and correct.",
-                    access_request: "Access Request: Please provision or confirm access for the requested resource.",
-                    maintenance: "Planned Maintenance: System will be unavailable during the specified window.",
-                    security_alert: "Security Alert: Unusual activity detected. Please review and confirm.",
-                  };
-                  const msg = defaults[v] || "";
-                  setPayload((p) => ({ ...p, message: msg }));
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a cause" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="policy_non_compliance">Policy Non-Compliance</SelectItem>
-                    <SelectItem value="report_delay">Report Delay</SelectItem>
-                    <SelectItem value="performance_issue">Performance Issue</SelectItem>
-                    <SelectItem value="billing_discrepancy">Billing Discrepancy</SelectItem>
-                    <SelectItem value="access_request">Access Request</SelectItem>
-                    <SelectItem value="maintenance">Maintenance</SelectItem>
-                    <SelectItem value="security_alert">Security Alert</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Role</Label>
-                <Select value={targetRole} onValueChange={(v)=> { setTargetRole(v); setPayload(p=>({ ...p, receiver: "__REQUIRED__" })); }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="End-App-User">End User</SelectItem>
-                    <SelectItem value="Analyst">Analyst</SelectItem>
-                    <SelectItem value="Agronomist">Agronomist</SelectItem>
-                    <SelectItem value="Support">Support</SelectItem>
-                    <SelectItem value="Business">Business</SelectItem>
-                    <SelectItem value="Developer">Developer</SelectItem>
-                    <SelectItem value="SuperAdmin">SuperAdmin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {targetRole && (
+            <DialogContent className="sm:max-w-[625px]">
+              <DialogHeader>
+                <DialogTitle>Send New Notification</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>Recipient</Label>
-                  <Select value={payload.receiver} onValueChange={(v) => setPayload({ ...payload, receiver: v })}>
+                  <Label>Receiver Role</Label>
+                  <Select value={targetRole} onValueChange={(v) => { setTargetRole(v); setRecipient(""); }}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select recipient" />
+                      <SelectValue placeholder="Select receiver role" />
                     </SelectTrigger>
                     <SelectContent>
-                      {recipients.map((u)=> (
-                        <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.email || u.username}</SelectItem>
+                      {allowedReceivers.map((role) => (
+                        <SelectItem key={role} value={role}>{role}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-              <div className="space-y-2">
-                <Label>Scheduling</Label>
-                <Select value={scheduleType} onValueChange={(v:any) => setScheduleType(v)}>
-                  <SelectTrigger><SelectValue placeholder="Immediate" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="immediate">Immediate</SelectItem>
-                    <SelectItem value="recurring">Recurring</SelectItem>
-                    <SelectItem value="windowed">Windowed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {scheduleType === "recurring" && (
+                {targetRole && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Recipient</Label>
+                      <Select value={recipient} onValueChange={setRecipient}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select recipient" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {recipients.map((u) => (
+                            <SelectItem key={u.id} value={String(u.id)}>{u.full_name || u.email || u.username}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {targetRole === 'End-App-User' && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Region Filter (Optional)</Label>
+                          <Input placeholder="e.g., Punjab" value={region} onChange={(e) => setRegion(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Crop Type Filter (Optional)</Label>
+                          <Input placeholder="e.g., Wheat" value={cropType} onChange={(e) => setCropType(e.target.value)} />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
                 <div className="space-y-2">
-                  <Label>Recurrence</Label>
-                  <Select value={recurrence} onValueChange={(v:any) => setRecurrence(v)}>
-                    <SelectTrigger><SelectValue placeholder="Daily" /></SelectTrigger>
+                  <Label>Type</Label>
+                  <Select value={notificationType} onValueChange={setNotificationType}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="daily">Daily</SelectItem>
-                      <SelectItem value="weekly">Weekly</SelectItem>
-                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="general">General</SelectItem>
+                      <SelectItem value="alert">Alert</SelectItem>
+                      <SelectItem value="update">Update</SelectItem>
+                      <SelectItem value="announcement">Announcement</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-              {scheduleType === "windowed" && (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Start</Label>
-                    <input type="datetime-local" className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>End</Label>
-                    <input type="datetime-local" className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} />
-                  </div>
+                <div className="space-y-2">
+                  <Label>Message</Label>
+                  <Textarea rows={4} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Enter your message..." />
                 </div>
-              )}
-              <div className="space-y-2">
-                <Label>Message</Label>
-                <Textarea rows={4} value={payload.message} onChange={(e) => setPayload({ ...payload, message: e.target.value })} />
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+                  <Button onClick={send} disabled={!message || !targetRole || !recipient}>
+                    <Send className="mr-2 h-4 w-4" />Send
+                  </Button>
+                </div>
               </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button onClick={create}>Send Notification</Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>All Notifications</CardTitle>
-          <CardDescription>Messages you send will appear here.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {items.length === 0 && (
-            <p className="text-sm text-muted-foreground">No notifications yet.</p>
-          )}
-          {items.length > 0 && (
-            <div className="space-y-4">
-              {items.map((n) => (
-                <div key={n.id} className="flex gap-4 p-4 rounded-lg border">
-                  <div className="flex-1 space-y-1">
-                    <p className="font-semibold text-foreground">{n.message}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(n.created_at).toLocaleString()}</p>
+      <Tabs defaultValue="received" className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="received">
+            <Inbox className="mr-2 h-4 w-4" />
+            Received ({receivedItems.filter((n) => !n.is_read).length})
+          </TabsTrigger>
+          <TabsTrigger value="sent">
+            <Send className="mr-2 h-4 w-4" />
+            Sent ({sentItems.length})
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="received">
+          <Card>
+            <CardHeader>
+              <CardTitle>Received Notifications</CardTitle>
+              <CardDescription>Messages sent to you</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {receivedItems.map((n: any) => (
+                  <div key={n.id} className={`flex gap-4 p-4 rounded-lg border ${!n.is_read ? 'bg-primary/5 border-primary/20' : 'bg-card'}`}>
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-foreground">From: {n.sender_name} ({n.sender_role})</p>
+                        {!n.is_read && <Badge variant='secondary' className="h-5">new</Badge>}
+                        <Badge variant='outline'>{n.notification_type}</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{n.message}</p>
+                      {n.tags && Object.keys(n.tags).length > 0 && (
+                        <div className="flex gap-2 mt-2">
+                          {Object.entries(n.tags).map(([key, value]) => (
+                            <Badge key={key} variant="secondary" className="text-xs">
+                              {key}: {String(value)}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">{new Date(n.created_at).toLocaleString()}</p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={n.is_read ? "secondary" : "default"}>{n.is_read ? "Read" : "Unread"}</Badge>
-                    {!n.is_read && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => markAsRead(n.id)}
-                      >
-                        <Check className="h-4 w-4" />
-                      </Button>
-                    )}
+                ))}
+                {!loading && receivedItems.length === 0 && (
+                  <div className="text-sm text-muted-foreground">No notifications received yet.</div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="sent">
+          <Card>
+            <CardHeader>
+              <CardTitle>Sent Notifications</CardTitle>
+              <CardDescription>Messages you've sent</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {sentItems.map((n: any) => (
+                  <div key={n.id} className="flex gap-4 p-4 rounded-lg border bg-card">
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-foreground">To: {n.receiver_name} ({n.receiver_role})</p>
+                        <Badge variant='outline'>{n.notification_type}</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{n.message}</p>
+                      {n.tags && Object.keys(n.tags).length > 0 && (
+                        <div className="flex gap-2 mt-2">
+                          {Object.entries(n.tags).map(([key, value]) => (
+                            <Badge key={key} variant="secondary" className="text-xs">
+                              {key}: {String(value)}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">{new Date(n.created_at).toLocaleString()}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+                {!loading && sentItems.length === 0 && (
+                  <div className="text-sm text-muted-foreground">No notifications sent yet.</div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

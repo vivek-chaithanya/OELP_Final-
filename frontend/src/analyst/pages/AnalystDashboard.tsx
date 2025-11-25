@@ -66,7 +66,14 @@ export default function AnalystDashboard() {
 
   const chart3 = useMemo(() => {
     const raw = (summary && Array.isArray(summary.region_distribution)) ? summary.region_distribution : [];
-    return raw.map((x: any, i: number) => ({ name: x?.name || `Region ${i+1}`, value: Number(x?.value) || 0 }));
+    // Ensure we have valid data
+    if (raw.length === 0) {
+      return [{ name: "No Data", value: 0 }];
+    }
+    return raw.map((x: any, i: number) => ({ 
+      name: x?.name || `Region ${i+1}`, 
+      value: Number(x?.value) || 0 
+    }));
   }, [summary]);
 
   return (
@@ -85,7 +92,22 @@ export default function AnalystDashboard() {
         <AnalyticsChart title="Lifecycle Completion" data={chart1} dataKey="value" />
         <AnalyticsChart title="Crop Distribution" data={chart2} dataKey="value" />
       </div>
-      <AnalyticsChart title="Region Distribution" data={chart3} dataKey="value" />
+      {chart3.length > 0 && chart3[0].name !== "No Data" && (
+        <AnalyticsChart title="Region Distribution" data={chart3} dataKey="value" />
+      )}
+      {(!chart3.length || chart3[0].name === "No Data") && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Region Distribution</CardTitle>
+            <CardDescription>No region data available yet</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Add fields with location information to see region distribution.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
