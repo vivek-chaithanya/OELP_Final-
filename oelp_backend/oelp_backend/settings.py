@@ -12,7 +12,12 @@ load_dotenv(dotenv_path=REPO_ROOT / ".env")
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ------------------- SECURITY -------------------
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "local-dev-key-only-change-this")
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+
+# Raise error if SECRET_KEY is not set at all
+if not SECRET_KEY:
+    raise ValueError("DJANGO_SECRET_KEY environment variable is required! Add it to your .env file or Vercel environment variables.")
+
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
 
 # Raise error if SECRET_KEY is not set in production

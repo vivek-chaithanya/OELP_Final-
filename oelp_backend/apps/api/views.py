@@ -13,7 +13,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count, F, Q
 from django.http import HttpResponse
 from rest_framework import mixins, status, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -2279,6 +2280,15 @@ class TicketHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             ticket_id__in=accessible_tickets
         ).select_related("ticket", "user").order_by("-created_at")
 
-# Import at end to avoid circular reference
 from .serializers import UserSerializer  # noqa: E402
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def health_check(request):
+    """Simple health check endpoint"""
+    return Response({
+        'status': 'ok',
+        'debug': settings.DEBUG,
+        'database': 'connected' if connection.ensure_connection() else 'disconnected'
+    })
 
