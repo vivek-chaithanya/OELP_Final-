@@ -150,7 +150,7 @@ else:
 
 # ------------------- REST FRAMEWORK -------------------
 REST_FRAMEWORK = {
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],  # Changed from IsAuthenticated
     "DEFAULT_AUTHENTICATION_CLASSES": ["apps.api.auth.TokenAuthentication"],
     "DEFAULT_PAGINATION_CLASS": "apps.api.pagination.DefaultPageNumberPagination",
     "PAGE_SIZE": 20,
