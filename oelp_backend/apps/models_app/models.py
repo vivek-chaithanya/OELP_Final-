@@ -20,6 +20,7 @@ from .user_plan import (
     Transaction,
 )  # noqa: F401
 from .notifications import Notification, SupportRequest  # noqa: F401
+from .support_ticket import SupportTicket, TicketComment, TicketHistory  # noqa: F401
 from .token import UserAuthToken  # noqa: F401
 from django.contrib.contenttypes.fields import GenericForeignKey  # noqa: F401
 from django.contrib.contenttypes.models import ContentType  # noqa: F401

@@ -11,6 +11,7 @@ from apps.models_app.feature import Feature, FeatureType
 from apps.models_app.feature_plan import PlanFeature
 from apps.models_app.irrigation import IrrigationMethods
 from apps.models_app.notifications import Notification, SupportRequest
+from apps.models_app.support_ticket import SupportTicket, TicketComment, TicketHistory
 from apps.models_app.plan import Plan
 from apps.models_app.soil_report import SoilTexture, SoilReport
 from apps.models_app.token import UserAuthToken
@@ -431,4 +432,117 @@ class TransactionSerializer(serializers.ModelSerializer):
             "invoice_pdf",
             "created_at",
         )
+
+
+# Support Ticket Serializers
+
+class TicketCommentSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source="user.full_name", read_only=True)
+    user_roles = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TicketComment
+        fields = (
+            "id",
+            "ticket",
+            "user",
+            "user_name",
+            "user_roles",
+            "comment",
+            "is_internal",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("user", "created_at", "updated_at")
+
+    def get_user_roles(self, obj):
+        try:
+            return list(obj.user.user_roles.select_related("role").values_list("role__name", flat=True))
+        except Exception:
+            return []
+
+
+class TicketHistorySerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source="user.full_name", read_only=True)
+
+    class Meta:
+        model = TicketHistory
+        fields = (
+            "id",
+            "ticket",
+            "user",
+            "user_name",
+            "action",
+            "description",
+            "old_value",
+            "new_value",
+            "created_at",
+        )
+        read_only_fields = ("created_at",)
+
+
+class SupportTicketSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.CharField(source="created_by.full_name", read_only=True)
+    created_by_email = serializers.CharField(source="created_by.email", read_only=True)
+    assigned_to_support_name = serializers.CharField(source="assigned_to_support.full_name", read_only=True)
+    forwarded_to_user_name = serializers.CharField(source="forwarded_to_user.full_name", read_only=True)
+    resolved_by_name = serializers.CharField(source="resolved_by.full_name", read_only=True)
+    comments = TicketCommentSerializer(many=True, read_only=True)
+    comments_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SupportTicket
+        fields = (
+            "id",
+            "ticket_number",
+            "title",
+            "description",
+            "category",
+            "created_by",
+            "created_by_name",
+            "created_by_email",
+            "assigned_to_support",
+            "assigned_to_support_name",
+            "forwarded_to_role",
+            "forwarded_to_user",
+            "forwarded_to_user_name",
+            "status",
+            "priority",
+            "created_at",
+            "updated_at",
+            "resolved_at",
+            "closed_at",
+            "resolution_notes",
+            "resolved_by",
+            "resolved_by_name",
+            "comments",
+            "comments_count",
+        )
+        read_only_fields = (
+            "ticket_number",
+            "created_by",
+            "created_at",
+            "updated_at",
+        )
+
+    def get_comments_count(self, obj):
+        return obj.comments.count()
+
+
+class SupportTicketCreateSerializer(serializers.ModelSerializer):
+    """Simplified serializer for end-users creating tickets"""
+    
+    class Meta:
+        model = SupportTicket
+        fields = (
+            "title",
+            "description",
+            "category",
+            "priority",
+        )
+
+    def create(self, validated_data):
+        # Auto-assign created_by from request user
+        validated_data["created_by"] = self.context["request"].user
+        return super().create(validated_data)
 

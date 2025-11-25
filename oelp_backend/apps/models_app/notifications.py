@@ -15,6 +15,22 @@ class Notification(models.Model):
     def __str__(self) -> str:  # pragma: no cover
         return f"Notification to {self.receiver}"
 
+    def save(self, *args, **kwargs):
+        """Block support ticket notifications from being saved"""
+        message = str(self.message) if self.message else ''
+        notification_type = self.notification_type if hasattr(self, 'notification_type') else ''
+        related_type = self.related_object_type if hasattr(self, 'related_object_type') else ''
+
+        # Block all support ticket notifications
+        if ('Support request' in message or
+            'support request' in message.lower() or
+            notification_type == 'support_ticket' or
+            related_type == 'support_ticket'):
+            # Don't save - return without calling super()
+            return None
+
+        super().save(*args, **kwargs)
+
 
 class SupportCategory(models.TextChoices):
     CROP = "crop", "Crop"

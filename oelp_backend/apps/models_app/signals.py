@@ -1,10 +1,30 @@
 from __future__ import annotations
 
 from django.apps import apps
-from django.db.models.signals import post_migrate, post_save
+from django.db.models.signals import post_migrate, post_save, pre_save
 from django.dispatch import receiver
 from django.db import connection
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
+
+# TEMPORARILY COMMENT OUT the signal to fix the startup error
+# We'll add it back after fixing the model conflict
+
+# from .notifications import Notification
+# from .support_ticket import SupportTicket
+
+# @receiver(pre_save, sender=Notification)
+# def block_support_ticket_notifications(sender, instance, **kwargs):
+#     """Prevent any support ticket notifications from being saved"""
+#     message = str(getattr(instance, 'message', ''))
+#     notification_type = getattr(instance, 'notification_type', '')
+#     related_type = getattr(instance, 'related_object_type', '')
+#     
+#     if ('Support request' in message or 
+#         'support request' in message.lower() or
+#         notification_type == 'support_ticket' or
+#         related_type == 'support_ticket'):
+#         raise ValidationError("Support ticket notifications are blocked.")
 
 
 @receiver(post_migrate)
@@ -237,3 +257,22 @@ def replicate_field_image_to_asset(sender, instance, created, **kwargs):
     except Exception:
         pass
 
+
+# At the END of the file:
+from django.core.exceptions import ValidationError
+from .notifications import Notification  # Changed from .notification to .notifications
+from .support_ticket import SupportTicket
+
+
+@receiver(pre_save, sender=Notification)
+def block_support_ticket_notifications(sender, instance, **kwargs):
+    """Prevent support ticket notifications at signal level"""
+    message = str(getattr(instance, 'message', ''))
+    notification_type = getattr(instance, 'notification_type', '')
+    related_type = getattr(instance, 'related_object_type', '')
+    
+    if ('Support request' in message or 
+        'support request' in message.lower() or
+        notification_type == 'support_ticket' or
+        related_type == 'support_ticket'):
+        raise ValidationError("Support ticket notifications are blocked. Use Support Tickets page.")
