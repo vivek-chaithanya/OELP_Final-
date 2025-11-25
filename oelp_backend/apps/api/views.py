@@ -10,6 +10,9 @@ from django.db import IntegrityError
 from django.contrib.auth import authenticate
 from django.db.models import Count, F, Q
 from django.http import HttpResponse
+from django.contrib.contenttypes.models import ContentType
+from django.db import connection
+from django.conf import settings
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -74,17 +77,9 @@ class SignUpView(APIView):
 
     def post(self, request):
         serializer = SignUpSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        # Ensure default role assignment for end users
-        try:
-            end_role, _ = Role.objects.get_or_create(name="End-App-User")
-            UserRole.objects.get_or_create(user=user, role=end_role, defaults={"userrole_id": user.email or user.username})
-        except Exception:
-            pass
-        token_value = secrets.token_urlsafe(48)
-        UserAuthToken.objects.update_or_create(user=user, defaults={"access_token": token_value})
-        return Response({"user": UserSerializer(user).data, "token": token_value}, status=status.HTTP_201_CREATED)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
             user = serializer.save()
             # Ensure default role assignment for end users
@@ -95,22 +90,18 @@ class SignUpView(APIView):
                 pass
             token_value = secrets.token_urlsafe(48)
             UserAuthToken.objects.update_or_create(user=user, defaults={"access_token": token_value})
+            
+            from .serializers import UserSerializer
             return Response({"user": UserSerializer(user).data, "token": token_value}, status=status.HTTP_201_CREATED)
         except IntegrityError as e:
             # Handle duplicate email/username
             error_msg = str(e)
             if 'email' in error_msg:
-                return Response({
-                    'email': ['A user with this email already exists.']
-                }, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'email': ['A user with this email already exists.']}, status=status.HTTP_400_BAD_REQUEST)
             elif 'username' in error_msg:
-                return Response({
-                    'username': ['A user with this username already exists.']
-                }, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'username': ['A user with this username already exists.']}, status=status.HTTP_400_BAD_REQUEST)
             else:
-                return Response({
-                    'detail': 'User with these credentials already exists.'
-                }, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'detail': 'User with these credentials already exists.'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LoginView(APIView):
@@ -125,9 +116,12 @@ class LoginView(APIView):
             user = authenticate(username=username, password=password)
             
             if user:
-                token, created = Token.objects.get_or_create(user=user)
+                # Use UserAuthToken instead of Token
+                token_value = secrets.token_urlsafe(48)
+                UserAuthToken.objects.update_or_create(user=user, defaults={"access_token": token_value})
+                
                 return Response({
-                    'token': token.key,
+                    'token': token_value,
                     'user': {
                         'id': user.id,
                         'username': user.username,
@@ -136,9 +130,7 @@ class LoginView(APIView):
                     }
                 }, status=status.HTTP_200_OK)
             else:
-                return Response({
-                    'detail': 'Invalid credentials'
-                }, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1916,7 +1908,7 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        user_roles = list(user.user_roles.select_related("role").values_list("role__name", flat=True))
+        user_roles = list(user.user_roles.select_related("role).values_list("role__name", flat=True))
         
         # Support team sees all tickets
         if "Support" in user_roles or "Admin" in user_roles or "SuperAdmin" in user_roles:
