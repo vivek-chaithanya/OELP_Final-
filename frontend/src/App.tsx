@@ -149,31 +149,71 @@ function useRoles() {
       setLoading(false);
       return;
     }
+    
+    // First, try to get roles from localStorage (faster, no API call)
+    try {
+      const cachedUser = localStorage.getItem("user");
+      if (cachedUser) {
+        const userData = JSON.parse(cachedUser);
+        if (userData.roles && Array.isArray(userData.roles)) {
+          console.log('✅ Using cached roles:', userData.roles);
+          setRoles(userData.roles);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse cached user data:', e);
+    }
+    
+    // If no cached roles, fetch from API
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/auth/me/`, { headers: { Authorization: `Token ${token}` } });
+        console.log('📡 Fetching user roles from API...');
+        const res = await fetch(`${API_URL}/auth/me/`, { 
+          headers: { Authorization: `Token ${token}` } 
+        });
+        
         if (res.ok) {
           const data = await res.json();
-          setRoles(Array.isArray(data?.roles) ? data.roles : []);
+          console.log('✅ Fetched user data:', data);
+          const userRoles = Array.isArray(data?.roles) ? data.roles : [];
+          setRoles(userRoles);
+          
+          // Cache the user data for next time
+          localStorage.setItem("user", JSON.stringify(data));
         } else if (res.status === 401 || res.status === 403) {
+          console.warn('❌ Authentication failed, clearing token');
           // Invalid token: clear and treat as unauthenticated
-          try { 
-            localStorage.removeItem("token"); 
-          } catch (e) {
-            // Ignore localStorage errors
-          }
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
           setRoles(null);
         } else {
+          console.warn('⚠️ API returned error status:', res.status);
           // Other errors, keep token but set empty roles
           setRoles([]);
         }
-      } catch {
-        // On network or parsing error, clear token and require re-auth
-        try { 
-          localStorage.removeItem("token"); 
+      } catch (error) {
+        console.error('❌ Network error fetching roles:', error);
+        // On network error, try to use any cached data
+        try {
+          const cachedUser = localStorage.getItem("user");
+          if (cachedUser) {
+            const userData = JSON.parse(cachedUser);
+            if (userData.roles && Array.isArray(userData.roles)) {
+              console.log('⚠️ Using cached roles after network error');
+              setRoles(userData.roles);
+              setLoading(false);
+              return;
+            }
+          }
         } catch (e) {
-          // Ignore localStorage errors
+          // Ignore
         }
+        
+        // If no cached data, clear token
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
         setRoles(null);
       } finally {
         setLoading(false);

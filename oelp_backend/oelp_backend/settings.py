@@ -33,14 +33,24 @@ CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL", "true").lower() == "true"
 CORS_ALLOWED_ORIGINS = [
     "https://oelp-final-4q5s.vercel.app",
     "https://oelp-backend.vercel.app",
+    "https://frontend-vivek-chaithanyas-projects.vercel.app",  # Your frontend deployment
+    "https://frontend-git-main-vivek-chaithanyas-projects.vercel.app",  # Git branch deployments
+    "https://frontend-*.vercel.app",  # All preview deployments
     "http://localhost:8080",
     "http://127.0.0.1:8080",
+    "http://localhost:5173",  # Vite default port
+    "http://127.0.0.1:5173",
 ]
+CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     "https://oelp-final-4q5s.vercel.app",
     "https://oelp-backend.vercel.app",
+    "https://frontend-vivek-chaithanyas-projects.vercel.app",
+    "https://frontend-git-main-vivek-chaithanyas-projects.vercel.app",
     "http://localhost:8080",
     "http://127.0.0.1:8080",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
     "https://*.onrender.com",
     "https://*.vercel.app",
     *[f"https://{h.strip()}" for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()],

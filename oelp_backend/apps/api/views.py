@@ -120,6 +120,12 @@ class LoginView(APIView):
                 token_value = secrets.token_urlsafe(48)
                 UserAuthToken.objects.update_or_create(user=user, defaults={"access_token": token_value})
                 
+                # Get user roles
+                try:
+                    roles = list(user.user_roles.select_related("role").values_list("role__name", flat=True))
+                except Exception:
+                    roles = []
+                
                 return Response({
                     'token': token_value,
                     'user': {
@@ -127,6 +133,7 @@ class LoginView(APIView):
                         'username': user.username,
                         'email': user.email if hasattr(user, 'email') else '',
                         'full_name': user.full_name if hasattr(user, 'full_name') else '',
+                        'roles': roles,
                     }
                 }, status=status.HTTP_200_OK)
             else:
@@ -148,30 +155,62 @@ class LogoutView(APIView):
 
 class MeView(APIView):
     authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        from .serializers import UserSerializer
+        try:
+            # Ensure user is authenticated
+            if not request.user or not request.user.is_authenticated:
+                return Response(
+                    {"detail": "Authentication credentials were not provided."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            serializer = UserSerializer(request.user)
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"detail": f"Error retrieving user data: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     def put(self, request):
-        user = request.user
-        allowed_fields = {"email", "username", "full_name", "phone_number", "avatar"}
-        for key, value in request.data.items():
-            if key in allowed_fields:
-                setattr(user, key, value)
-        user.save()
-        # Record profile update in activity log
+        from .serializers import UserSerializer
         try:
-            ct = ContentType.objects.get_for_model(user.__class__)
-            UserActivity.objects.create(
-                user=user,
-                action="update",
-                content_type=ct,
-                object_id=user.pk,
-                description="Profile updated",
+            if not request.user or not request.user.is_authenticated:
+                return Response(
+                    {"detail": "Authentication credentials were not provided."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            user = request.user
+            allowed_fields = {"email", "username", "full_name", "phone_number", "avatar"}
+            for key, value in request.data.items():
+                if key in allowed_fields:
+                    setattr(user, key, value)
+            user.save()
+            
+            # Record profile update in activity log
+            try:
+                ct = ContentType.objects.get_for_model(user.__class__)
+                UserActivity.objects.create(
+                    user=user,
+                    action="update",
+                    content_type=ct,
+                    object_id=user.pk,
+                    description="Profile updated",
+                )
+            except Exception:
+                pass
+            
+            serializer = UserSerializer(user)
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"detail": f"Error updating user data: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        except Exception:
-            pass
-        return Response(UserSerializer(user).data)
 
 
 class ChangePasswordView(APIView):
@@ -1909,7 +1948,7 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         user_roles = list(user.user_roles.select_related("role").values_list("role__name", flat=True))
-
+        
         # Support team sees all tickets
         if "Support" in user_roles or "Admin" in user_roles or "SuperAdmin" in user_roles:
             return SupportTicket.objects.all().select_related(

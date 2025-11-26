@@ -53,12 +53,24 @@ const Login = () => {
         
         if (data.token) {
           localStorage.setItem("token", data.token);
-          // Also store user info if needed
+          
+          // Store user data with roles
           if (data.user) {
             localStorage.setItem("user", JSON.stringify(data.user));
+            // Also store roles separately for easy access
+            if (data.user.roles) {
+              localStorage.setItem("user_roles", JSON.stringify(data.user.roles));
+            }
           }
+          
           toast.success("Welcome back!");
-          navigate("/");
+          
+          // Small delay to ensure localStorage is updated
+          setTimeout(() => {
+            navigate("/");
+            // Force a reload to ensure App.tsx picks up the new token and roles
+            window.location.href = "/";
+          }, 100);
         } else {
           toast.error("Login succeeded but no token received");
         }

@@ -20,7 +20,7 @@ export const apiCall = async (url, options = {}) => {
   // Add auth token if exists
   const token = localStorage.getItem('token');
   if (token) {
-    defaultHeaders['Authorization'] = `Bearer ${token}`;
+    defaultHeaders['Authorization'] = `Token ${token}`;
   }
 
   const config = {
